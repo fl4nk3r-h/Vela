@@ -1,6 +1,6 @@
 # Vela
 
-Latin for "sail" — you're giving Java devs the wind to move fast on UI without switching their entire stack.
+Latin for "sail" — giving Java devs the wind to move fast on UI without switching their entire stack.
 
 ## Introduction
 
