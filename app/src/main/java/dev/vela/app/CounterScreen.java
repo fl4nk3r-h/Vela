@@ -76,6 +76,6 @@ public final class CounterScreen extends VelaComponent {
         return VelaColumn.of(
                 VelaText.of("Counter"),
                 VelaText.of("Current value: " + count),
-                VelaButton.of("Increment"));
+                VelaButton.of("Increment", this::increment));
     }
 }
