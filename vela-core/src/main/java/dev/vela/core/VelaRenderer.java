@@ -11,12 +11,20 @@ public final class VelaRenderer {
         builder.append("  ".repeat(Math.max(0, depth)))
             .append(node.type());
 
+        if (node.key() != null) {
+            builder.append("#").append(node.key());
+        }
+
         if (node.text() != null) {
             builder.append("[").append(node.text()).append("]");
         }
 
         if (!node.props().isEmpty()) {
             builder.append(" ").append(node.props());
+        }
+
+        if (!node.eventNames().isEmpty()) {
+            builder.append(" events=").append(node.eventNames());
         }
 
         builder.append(System.lineSeparator());
