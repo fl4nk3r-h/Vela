@@ -211,6 +211,8 @@ ViewNode item = VelaListItem.of(
 
 ## Renderer Contract
 
+A retained backend can implement `RendererBackend<H>` and use `MountedTree` or `VelaRuntime` to preserve host handles. See the [runtime guide](runtime-guide.md) for mounting, property/event updates, child ordering, and disposal. The Android showcase has not yet migrated to this contract.
+
 A graphical renderer should:
 
 1. Map each supported node type to a platform widget or drawing operation.
@@ -226,5 +228,6 @@ Unknown node types or properties should degrade predictably rather than corrupti
 
 - [`README.md`](../README.md)
 - [`usage-guide.md`](usage-guide.md)
+- [`runtime-guide.md`](runtime-guide.md)
 - [`framework-gaps.md`](framework-gaps.md)
 - [`project-structure.md`](project-structure.md)

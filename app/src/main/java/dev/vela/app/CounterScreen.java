@@ -16,29 +16,25 @@
 
 package dev.vela.app;
 
-import dev.vela.annotation.State;
 import dev.vela.components.VelaButton;
 import dev.vela.components.VelaColumn;
 import dev.vela.components.VelaText;
+import dev.vela.core.MutableState;
 import dev.vela.core.VelaComponent;
 import dev.vela.core.ViewNode;
 
 /**
- * /**
  * A simple counter component that can be incremented and reset.
  *
  * <p>
- * Uses the {@code @State} annotation to manage the count state
- * and marks itself as dirty whenever the count changes,
- * prompting a re-render when necessary.
+ * Observable state marks the component dirty when the count changes.
  *
  * @author fl4nk3r
  * @version 1.0.0
  * @since 1.0
  */
 public final class CounterScreen extends VelaComponent {
-    @State
-    private int count;
+    private final MutableState<Integer> count = state(0);
 
     /**
      * Returns the current count value.
@@ -46,23 +42,21 @@ public final class CounterScreen extends VelaComponent {
      * @return the current count
      */
     public int count() {
-        return count;
+        return count.get();
     }
 
     /**
      * Increments the count by 1.
      */
     public void increment() {
-        count++;
-        markDirty();
+        count.update(value -> value + 1);
     }
 
     /**
      * Resets the count to 0.
      */
     public void reset() {
-        count = 0;
-        markDirty();
+        count.set(0);
     }
 
     /**
@@ -75,7 +69,7 @@ public final class CounterScreen extends VelaComponent {
     public ViewNode render() {
         return VelaColumn.of(
                 VelaText.of("Counter"),
-                VelaText.of("Current value: " + count),
+                VelaText.of("Current value: " + count.get()),
                 VelaButton.of("Increment", this::increment));
     }
 }

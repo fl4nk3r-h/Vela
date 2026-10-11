@@ -16,9 +16,12 @@
 
 package dev.vela.app;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.logging.Logger;
 
-import dev.vela.core.VelaRenderer;
+import dev.vela.core.TextRendererBackend;
+import dev.vela.core.VelaRuntime;
 
 /**
  * App is the entry point of the application that demonstrates the usage of the
@@ -32,23 +35,22 @@ public final class App {
     private static final Logger logger = Logger.getLogger(App.class.getName());
 
     /**
-     * <p>
-     * The main method initializes the VelaRenderer and CounterScreen, renders the
-     * initial state, increments the counter, and renders the updated state if the
-     * component is marked as dirty.
+     * Mounts the counter, dispatches a click, and drains the deferred render queue.
      *
      * @param args
      */
     public static void main(String[] args) {
-        VelaRenderer renderer = new VelaRenderer();
         CounterScreen counterScreen = new CounterScreen();
-
-        logger.info(renderer.render(counterScreen.render()));
-
-        counterScreen.render().children().get(2).dispatch("click");
-        if (counterScreen.isDirty()) {
-            counterScreen.consumeDirty();
-            logger.info(renderer.render(counterScreen.render()));
+        TextRendererBackend backend = new TextRendererBackend();
+        Deque<Runnable> frames = new ArrayDeque<>();
+        try (VelaRuntime<TextRendererBackend.Node> runtime = new VelaRuntime<>(counterScreen, backend, frames::addLast)) {
+            runtime.mount();
+            logger.info(backend.output());
+            runtime.root().children().get(2).dispatch("click");
+            while (!frames.isEmpty()) {
+                frames.removeFirst().run();
+            }
+            logger.info(backend.output());
         }
     }
 }

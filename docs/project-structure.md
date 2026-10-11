@@ -32,7 +32,7 @@ Keep shared framework behavior in `vela-core`. Keep compile-time checks in `vela
 | --- | --- | --- |
 | `dev.vela.annotation` | `State` | Marks mutable fields that participate in component state |
 | `dev.vela.components` | Layouts, controls, navigation, feedback, overlays, and data display | Typed factories for semantic `ViewNode` shapes |
-| `dev.vela.core` | `VelaComponent`, `StateManager`, `ViewNode`, `UiEvent`, `VelaRenderer` | Component lifecycle, dirty state, view-tree data, event dispatch, and text output |
+| `dev.vela.core` | `VelaComponent`, `MutableState`, `VelaRuntime`, `MountedTree`, `RendererBackend`, `ViewNode`, `UiEvent`, `VelaRenderer` | State, mounting, scheduling, reconciliation, view data, events, and text output |
 | `dev.vela.ui` | `Modifier`, `TextStyle`, alignment, arrangement, orientation, variants | Shared immutable UI configuration |
 
 ### `vela-compiler`
@@ -71,12 +71,12 @@ Daymark follows the same state flow, but `VelaAndroidRenderer` maps the tree to 
 
 ## Runtime Flow
 
-1. `App` creates a `CounterScreen` and renders its `ViewNode` tree.
-2. A renderer or test dispatches the button node's `click` event.
-3. `CounterScreen.increment()` updates its `@State` field and calls `markDirty()`.
-4. `StateManager` records the dirty flag and invokes the component callback once per clean-to-dirty transition.
-5. `App` checks `isDirty()`, consumes the flag, and renders the updated tree through `VelaRenderer`.
-6. `VelaRenderer` walks the immutable tree and produces an indented text representation.
+1. `App` mounts `CounterScreen` through `VelaRuntime` and `TextRendererBackend`.
+2. A retained button handle dispatches `click` through its current `ViewNode` description.
+3. `CounterScreen.increment()` updates observable state, automatically marking the owner dirty.
+4. The runtime queues one deferred callback while invalidations are pending.
+5. The callback renders the latest state and reconciles matching type/key handles through `MountedTree`.
+6. The text backend exposes the current diagnostic output; closing the runtime releases the mounted tree.
 
 ## Source Layout
 
@@ -103,6 +103,7 @@ Vela/
     ├── documentation-guide.md
     ├── framework-gaps.md
     ├── project-structure.md
+    ├── runtime-guide.md
     └── usage-guide.md
 ```
 
@@ -135,4 +136,5 @@ The demo logs the initial counter tree, increments the counter, consumes the dir
 - [`components.md`](components.md)
 - [`framework-gaps.md`](framework-gaps.md)
 - [`usage-guide.md`](usage-guide.md)
+- [`runtime-guide.md`](runtime-guide.md)
 - [`agents.md`](../agents.md)

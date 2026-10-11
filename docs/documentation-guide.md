@@ -19,6 +19,7 @@ This page defines how Vela documentation is organized and maintained. It keeps t
 | --- | --- | --- |
 | [`README.md`](../README.md) | First visit, setup, commands, and project summary | A feature, module, command, or durable page is added |
 | [`usage-guide.md`](usage-guide.md) | Public runtime API, examples, current lifecycle, and testing style | Component APIs, state behavior, renderer behavior, or examples change |
+| [`runtime-guide.md`](runtime-guide.md) | Observable state, scheduling, lifecycle, and retained renderer APIs | State, mounting, reconciliation, or backend contracts change |
 | [`components.md`](components.md) | Component catalog, modifiers, events, semantics, and renderer contract | A component or shared UI primitive changes |
 | [`project-structure.md`](project-structure.md) | Architecture, module boundaries, and runtime flow | Packages, dependencies, or core behavior change |
 | [`framework-gaps.md`](framework-gaps.md) | Missing capabilities, implementation backlog, and milestone candidates | A gap is closed, reprioritized, or newly discovered |
