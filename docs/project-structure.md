@@ -1,61 +1,112 @@
 # Project Structure
 
-This repository is organized around a simple three-module split so the framework code stays separate from the demo app.
+## Page Metadata
 
-## `vela-core`
+| Field | Value |
+| --- | --- |
+| Status | Active |
+| Audience | Contributors and coding agents |
+| Owner | Vela maintainers |
+| Scope | Gradle modules and runtime flow |
 
-The core module is the shared runtime surface.
+## Overview
 
-### Responsibilities
+Vela is a Java 21 Gradle workspace split into three modules. The split keeps reusable runtime code, compile-time validation, and the executable example independent while allowing the `app` module to exercise the complete flow.
 
-- Define the component base class.
-- Model the virtual UI tree.
-- Track dirty state and re-render requests.
-- Provide small component factories for text, button, and column nodes.
+## Module Ownership
 
-### Key Types
+| Module | Responsibility | Main dependency relationship |
+| --- | --- | --- |
+| `vela-core` | Runtime component model, immutable view tree, state dirtiness, and text rendering | No project dependency |
+| `vela-compiler` | Annotation processor that validates `@State` fields | Depends on `vela-core` |
+| `app` | Runnable counter example and integration tests | Depends on `vela-core`; applies `vela-compiler` as an annotation processor |
 
-- `dev.vela.core.VelaComponent`
-- `dev.vela.core.ViewNode`
-- `dev.vela.core.VelaRenderer`
-- `dev.vela.core.StateManager`
-- `dev.vela.annotation.State`
-- `dev.vela.components.VelaText`
-- `dev.vela.components.VelaButton`
-- `dev.vela.components.VelaColumn`
+Keep shared framework behavior in `vela-core`. Keep compile-time checks in `vela-compiler`. Keep product or demo screens in `app`.
 
-## `vela-compiler`
+## Package Map
 
-The compiler module is reserved for annotation processing.
+### `vela-core`
 
-### Responsibilities
+| Package | Key types | Responsibility |
+| --- | --- | --- |
+| `dev.vela.annotation` | `State` | Marks mutable fields that participate in component state |
+| `dev.vela.components` | `VelaText`, `VelaButton`, `VelaColumn` | Small factories for common `ViewNode` shapes |
+| `dev.vela.core` | `VelaComponent`, `StateManager`, `ViewNode`, `VelaRenderer` | Component lifecycle, dirty state, view-tree data, and text output |
 
-- Validate `@State` usage at compile time.
-- Keep generation logic isolated from runtime classes.
-- Provide the home for future code generation and metadata extraction.
+### `vela-compiler`
 
-### Key Type
+| Package | Key type | Responsibility |
+| --- | --- | --- |
+| `dev.vela.processor` | `StateProcessor` | Rejects `@State` usage outside fields and on final fields |
 
-- `dev.vela.processor.StateProcessor`
+### `app`
 
-## `app`
+| Package | Key types | Responsibility |
+| --- | --- | --- |
+| `dev.vela.app` | `App`, `CounterScreen` | Demonstrates state mutation, dirty tracking, and rendering |
 
-The app module is the demo and integration surface.
+## Dependency Flow
 
-### Responsibilities
+```text
+app
+├── runtime dependency ──> vela-core
+└── annotation processor ─> vela-compiler ──> vela-core
+```
 
-- Host the executable entry point.
-- Demonstrate a real component screen.
-- Exercise the rendering and dirty-state flow.
+The compiler is active during `app` compilation. It does not replace runtime state management; it validates source-level use of `@State` before the application runs.
 
-### Key Types
+## Runtime Flow
 
-- `dev.vela.app.App`
-- `dev.vela.app.CounterScreen`
+1. `App` creates a `CounterScreen` and renders its `ViewNode` tree.
+2. `CounterScreen.increment()` updates its `@State` field and calls `markDirty()`.
+3. `StateManager` records the dirty flag and invokes the component callback once per clean-to-dirty transition.
+4. `App` checks `isDirty()`, consumes the flag, and renders the updated tree through `VelaRenderer`.
+5. `VelaRenderer` walks the immutable tree and produces an indented text representation.
 
-## Working Rules
+## Source Layout
 
-- Put shared framework code in `vela-core`.
-- Put compile-time checks and generators in `vela-compiler`.
-- Put demo or product-specific screens in `app`.
-- Keep names domain-specific. Avoid dumping unrelated helpers into broad catch-all packages.
+```text
+Vela/
+├── app/
+│   ├── src/main/java/dev/vela/app/
+│   │   ├── App.java
+│   │   └── CounterScreen.java
+│   └── src/test/java/dev/vela/app/
+│       └── CounterScreenTest.java
+├── vela-core/
+│   └── src/main/java/dev/vela/
+│       ├── annotation/State.java
+│       ├── components/
+│       └── core/
+├── vela-compiler/
+│   └── src/main/java/dev/vela/processor/StateProcessor.java
+└── docs/
+    ├── documentation-guide.md
+    ├── framework-gaps.md
+    ├── project-structure.md
+    └── usage-guide.md
+```
+
+## Verification Commands
+
+Run the complete test suite:
+
+```bash
+./gradlew test
+```
+
+Run the executable demonstration:
+
+```bash
+./gradlew :app:run
+```
+
+The demo logs the initial counter tree, increments the counter, consumes the dirty flag, and logs the updated tree.
+
+## Related Pages
+
+- [`README.md`](../README.md)
+- [`documentation-guide.md`](documentation-guide.md)
+- [`framework-gaps.md`](framework-gaps.md)
+- [`usage-guide.md`](usage-guide.md)
+- [`agents.md`](../agents.md)
