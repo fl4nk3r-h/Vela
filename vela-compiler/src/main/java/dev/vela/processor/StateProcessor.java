@@ -10,6 +10,7 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.Modifier;
+import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.tools.Diagnostic;
 
@@ -18,8 +19,12 @@ import dev.vela.annotation.State;
 @SupportedSourceVersion(SourceVersion.RELEASE_21)
 @SupportedAnnotationTypes("dev.vela.annotation.State")
 public final class StateProcessor extends AbstractProcessor {
+    private static final String VELA_COMPONENT = "dev.vela.core.VelaComponent";
+
     @Override
-    public boolean process(Set<? extends javax.lang.model.element.TypeElement> annotations, RoundEnvironment roundEnv) {
+    public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+        TypeElement componentType = processingEnv.getElementUtils().getTypeElement(VELA_COMPONENT);
+
         for (Element element : roundEnv.getElementsAnnotatedWith(State.class)) {
             if (element.getKind() != ElementKind.FIELD) {
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "@State can only be used on fields", element);
@@ -29,6 +34,16 @@ public final class StateProcessor extends AbstractProcessor {
             VariableElement field = (VariableElement) element;
             if (field.getModifiers().contains(Modifier.FINAL)) {
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "@State fields must be mutable", element);
+            }
+
+            Element owner = field.getEnclosingElement();
+            if (componentType != null
+                    && owner instanceof TypeElement ownerType
+                    && !processingEnv.getTypeUtils().isAssignable(ownerType.asType(), componentType.asType())) {
+                processingEnv.getMessager().printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "@State fields must be declared inside a VelaComponent",
+                        element);
             }
         }
 
