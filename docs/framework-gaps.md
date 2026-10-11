@@ -23,11 +23,13 @@ Vela currently has:
 | State annotation | `@State` with source retention |
 | State validation | `StateProcessor` rejects non-field usage, final fields, and fields outside a `VelaComponent` |
 | Dirty tracking | `StateManager` stores a single atomic dirty flag per component |
-| View model | Immutable `ViewNode` with type, text, string props, and children |
-| Built-in nodes | `VelaText`, `VelaButton`, `VelaColumn` |
+| View model | Immutable `ViewNode` with stable keys, text, string props, children, and payload-aware event handlers |
+| Built-in nodes | Broad catalog across layout, content, inputs, feedback, navigation, overlays, and data display |
+| UI configuration | Immutable `Modifier`, `TextStyle`, layout enums, and semantic component variants |
+| Interaction | Named events with validated payload dispatch through `ViewNode` |
 | Renderer | `VelaRenderer` text tree output |
 | Demo | `CounterScreen` and `App` |
-| Tests | One counter behavior test |
+| Tests | Compiler validation, view-node, modifier, component-catalog, and counter integration tests |
 
 ## High-Priority Gaps
 
@@ -35,11 +37,10 @@ Vela currently has:
 | --- | --- | --- |
 | Automatic state invalidation | Developers must remember to call `markDirty()` after every state mutation | Generate state accessors, introduce observable state wrappers, or add a state delegate API |
 | Recomposition scheduler | Callers manually check and consume dirty flags | Add a runtime that owns mounted components and schedules render passes |
-| Event handling | `VelaButton` has a label but no click callback or action model | Add typed event props or an event registry on `ViewNode` |
 | Typed props | `ViewNode` only accepts `Map<String, String>` | Introduce a typed prop model that supports values, callbacks, styles, and accessibility metadata |
 | Renderer backend abstraction | Text output is useful for tests but not interactive UI | Define a renderer interface and keep text rendering as one backend |
 | Tree diffing | Every render produces a full new tree without reconciliation | Add node identity, keys, and a diff model before building richer backends |
-| Layout and styling | Column has no spacing, alignment, size, color, or typography controls | Add layout/style primitives and document their stable semantics |
+| Renderer conformance | Components expose rich layout, styling, and semantic metadata without a graphical backend | Define backend conformance tests for supported nodes and properties |
 | Component composition | Components cannot directly mount child components with lifecycle boundaries | Add a composition context that can render child components and preserve state |
 
 ## State And Compiler Gaps
@@ -65,29 +66,27 @@ Vela currently has:
 
 | Gap | Current behavior | Desired direction |
 | --- | --- | --- |
-| No stable identity | Nodes have type and props only | Add optional keys or generated identity |
-| No semantic roles | Button is just a node type and label | Add semantics for accessibility and interaction |
+| No keyed reconciliation | Nodes can carry stable keys, but no runtime consumes them | Use keys in the future tree-diff algorithm |
+| No semantic backend | Components expose roles, labels, and descriptions | Map semantics to platform accessibility APIs in each renderer |
 | No custom text escaping rules | Renderer prints text directly | Define renderer-safe escaping or structured output |
 | No children validation | Any node type can have any children through `ViewNode.node()` | Add component-level or renderer-level validation |
-| No slots | Components cannot expose reusable content slots | Add child lambdas or component factories once Java API shape is chosen |
+| No lazy content factories | Named slot nodes exist, but collection content is created eagerly | Add keyed item factories once the mounted runtime exists |
 
-## Component Library Gaps
+## Remaining Component Library Gaps
 
-| Missing primitive | Notes |
+| Missing capability | Notes |
 | --- | --- |
-| `Row` | Needed for horizontal layout |
-| `Box` or container | Needed for stacking and decoration |
-| `TextField` | Needed for input-driven samples |
-| `Image` | Needed for media |
-| `Spacer` | Needed for layout rhythm |
-| `LazyColumn` or list | Needed for scalable collections |
-| Modifiers | Needed for size, padding, click behavior, test tags, and semantics |
+| Virtualized collections | `VelaList` and `VelaGrid` describe content but do not lazily mount large data sets |
+| Rich text and editing | Styled text exists, but spans, selection, and document editing do not |
+| Canvas and charts | Custom node construction is available, but no drawing API is standardized |
+| Media playback | Images are described; audio and video lifecycle APIs are not defined |
+| Drag and drop | The event model exists, but pointer gestures and transfer payloads are not standardized |
+| Platform pickers | File, color, and time pickers require backend capability contracts |
 
 ## Documentation And Developer Experience Gaps
 
 | Gap | Why it matters |
 | --- | --- |
-| No API reference | Contributors must read source for every type |
 | No architecture decision records | Major API choices will be hard to trace |
 | No roadmap page | Implementation order is implicit |
 | No examples beyond counter | Hard to validate API ergonomics |
@@ -97,23 +96,24 @@ Vela currently has:
 ## Suggested Implementation Order
 
 1. Decide the state API: generated setters versus observable state holder.
-2. Add an event model for buttons because it unlocks interactive examples.
-3. Introduce a renderer abstraction and keep `VelaRenderer` as `TextRenderer` or a compatibility wrapper.
-4. Add a mounted runtime that can schedule and batch renders.
-5. Add typed props, modifiers, and basic layout primitives.
-6. Add tree identity and diffing before building a real interactive backend.
+2. Introduce a renderer abstraction and keep `VelaRenderer` as `TextRenderer` or a compatibility wrapper.
+3. Add a mounted runtime that can schedule and batch renders.
+4. Define a typed prop model or stable property schema for renderer compatibility.
+5. Add tree reconciliation that consumes stable node keys.
+6. Build the first graphical backend and its component conformance suite.
 
 ## Candidate First Milestones
 
 | Milestone | Outcome |
 | --- | --- |
-| Interactive counter kernel | Button click events can call `CounterScreen.increment()` through a runtime-owned event path |
+| Interactive counter kernel | Implemented: button click events call `CounterScreen.increment()` through `ViewNode.dispatch` |
 | Safer state | Mutating state through the recommended API always marks the component dirty |
 | Renderer contract | Text renderer and any future backend share a stable interface |
-| Basic layout vocabulary | `Column`, `Row`, `Text`, `Button`, and modifiers are documented and tested |
+| Basic layout vocabulary | Implemented and expanded into the full catalog documented in `components.md` |
 
 ## Related Pages
 
 - [`usage-guide.md`](usage-guide.md)
+- [`components.md`](components.md)
 - [`project-structure.md`](project-structure.md)
 - [`documentation-guide.md`](documentation-guide.md)

@@ -21,9 +21,10 @@ The current renderer is text-based. Vela does not yet include a native desktop, 
 | --- | --- | --- |
 | Composable function or component | `VelaComponent` subclass | Owns state and returns a `ViewNode` from `render()` |
 | Mutable state | Field annotated with `@State` | Compile-time validated, but changes must call `markDirty()` manually |
-| Composition tree | `ViewNode` | Immutable node with type, optional text, string props, and children |
+| Composition tree | `ViewNode` | Immutable node with type, optional stable key, text, string props, children, and event handlers |
 | Recomposition request | Dirty flag in `StateManager` | Set by `markDirty()` and consumed by the caller |
-| UI element factories | `VelaText`, `VelaButton`, `VelaColumn` | Convenience factories that create `ViewNode` instances |
+| UI element factories | `dev.vela.components` catalog | Layout, content, input, feedback, navigation, overlay, and data-display nodes |
+| Compose modifier | `Modifier` | Immutable sizing, spacing, appearance, layout, interaction, and semantic metadata |
 | Renderer | `VelaRenderer` | Produces an indented text representation of a tree |
 
 ## Install In A Module
@@ -71,6 +72,32 @@ public final class GreetingScreen extends VelaComponent {
 
 `render()` should describe the current UI from current component state. It should avoid mutating state directly; mutate state from explicit component methods and then mark the component dirty.
 
+## Compose Rich UI
+
+Components combine into immutable trees and accept shared modifiers:
+
+```java
+ViewNode profile = VelaCard.of(
+    ComponentVariant.OUTLINED,
+    Modifier.none().fillMaxWidth().padding(16).cornerRadius(8),
+    VelaRow.of(
+        Arrangement.SPACE_BETWEEN,
+        Alignment.CENTER,
+        12,
+        Modifier.none(),
+        VelaAvatar.initials("AV", 48, Modifier.none()),
+        VelaText.of(
+            "Aritra",
+            TextStyle.defaultStyle().fontSize(18).fontWeight(700),
+            Modifier.none().weight(1)
+        ),
+        VelaButton.of("Edit", this::openEditor)
+    )
+);
+```
+
+See the [component reference](components.md) for the complete catalog and signatures.
+
 ## Add State
 
 Annotate mutable state fields with `@State`:
@@ -91,7 +118,8 @@ public final class CounterScreen extends VelaComponent {
     public ViewNode render() {
         return VelaColumn.of(
             VelaText.of("Counter"),
-            VelaText.of("Current value: " + count)
+            VelaText.of("Current value: " + count),
+            VelaButton.of("Increment", this::increment)
         );
     }
 }
@@ -117,7 +145,7 @@ CounterScreen screen = new CounterScreen();
 
 String firstRender = renderer.render(screen.render());
 
-screen.increment();
+screen.render().children().get(2).dispatch("click");
 if (screen.isDirty()) {
     screen.consumeDirty();
     String secondRender = renderer.render(screen.render());
@@ -127,10 +155,10 @@ if (screen.isDirty()) {
 The current `VelaRenderer` output is intended for demonstration and tests. For the sample counter, it produces a tree shaped like:
 
 ```text
-column
+column {layout.arrangement=start, layout.alignment=stretch, layout.gap=0dp}
   text[Counter] {value=Counter}
   text[Current value: 1] {value=Current value: 1}
-  button {label=Increment}
+  button {state.enabled=true, semantics.role=button, label=Increment, variant=primary, enabled=true} events=[click]
 ```
 
 ## Build View Trees Directly
@@ -154,7 +182,18 @@ ViewNode badge = ViewNode.node(
 );
 ```
 
-All props are currently `String` values. Children and props are copied into unmodifiable collections when the node is created.
+All props are currently stored as `String` values. Events are stored separately as typed handlers and are exposed only through `eventNames()` and `dispatch(...)`. Children, props, and event maps are copied into unmodifiable collections when the node is created.
+
+For richer custom nodes, use the builder:
+
+```java
+ViewNode chart = ViewNode.builder("chart")
+    .key("revenue")
+    .prop("kind", "bar")
+    .modifier(Modifier.none().fillMaxWidth().height(280))
+    .on("select", event -> openDataPoint(event.value()))
+    .build();
+```
 
 ## Component Lifecycle Today
 
@@ -162,11 +201,12 @@ The current lifecycle is intentionally simple:
 
 1. Instantiate a `VelaComponent`.
 2. Call `render()` to build a fresh immutable `ViewNode` tree.
-3. Mutate component state through a component method.
-4. The method calls `markDirty()`.
-5. The caller checks `isDirty()`.
-6. The caller calls `consumeDirty()`.
-7. The caller renders again.
+3. A renderer dispatches a node event such as `click` or `change`.
+4. The event callback mutates component state through a component method.
+5. The method calls `markDirty()`.
+6. The caller checks `isDirty()`.
+7. The caller calls `consumeDirty()`.
+8. The caller renders again.
 
 `VelaComponent.onStateChanged()` is a protected hook. It is called once when the component moves from clean to dirty. Integrations can override it later to schedule a render.
 
@@ -179,7 +219,7 @@ Unit tests can assert dirty state and rendered text:
 void incrementMarksTheScreenDirtyAndUpdatesTheRenderTree() {
     CounterScreen screen = new CounterScreen();
 
-    screen.increment();
+    screen.render().children().get(2).dispatch("click");
 
     assertTrue(screen.isDirty());
     assertTrue(new VelaRenderer().render(screen.render()).contains("Current value: 1"));
@@ -205,5 +245,6 @@ Run the demo app:
 ## Related Pages
 
 - [`README.md`](../README.md)
+- [`components.md`](components.md)
 - [`project-structure.md`](project-structure.md)
 - [`framework-gaps.md`](framework-gaps.md)

@@ -45,7 +45,7 @@ public final class App {
 
         logger.info(renderer.render(counterScreen.render()));
 
-        counterScreen.increment();
+        counterScreen.render().children().get(2).dispatch("click");
         if (counterScreen.isDirty()) {
             counterScreen.consumeDirty();
             logger.info(renderer.render(counterScreen.render()));
