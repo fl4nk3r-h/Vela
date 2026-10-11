@@ -1,15 +1,33 @@
 package dev.vela.components;
 
-import java.util.Arrays;
-import java.util.List;
-
 import dev.vela.core.ViewNode;
+import dev.vela.ui.Alignment;
+import dev.vela.ui.Arrangement;
+import dev.vela.ui.Modifier;
 
 public final class VelaColumn {
     private VelaColumn() {
     }
 
     public static ViewNode of(ViewNode... children) {
-        return ViewNode.column(List.copyOf(Arrays.asList(children)));
+        return of(Arrangement.START, Alignment.STRETCH, 0, Modifier.none(), children);
+    }
+
+    public static ViewNode of(Modifier modifier, ViewNode... children) {
+        return of(Arrangement.START, Alignment.STRETCH, 0, modifier, children);
+    }
+
+    public static ViewNode of(
+            Arrangement arrangement,
+            Alignment alignment,
+            int gapDp,
+            Modifier modifier,
+            ViewNode... children) {
+        return ComponentSupport.node("column", modifier)
+                .prop("layout.arrangement", ComponentSupport.enumValue(arrangement))
+                .prop("layout.alignment", ComponentSupport.enumValue(alignment))
+                .prop("layout.gap", ComponentSupport.requireNonNegative(gapDp, "gapDp") + "dp")
+                .children(ComponentSupport.children(children))
+                .build();
     }
 }
