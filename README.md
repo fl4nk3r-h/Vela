@@ -28,8 +28,13 @@ Vela/
 ├── vela-compiler/
 │   └── src/main/java/dev/vela/processor/StateProcessor.java
 └── docs/
+    ├── framework-gaps.md
+    ├── usage-guide.md
+    ├── documentation-guide.md
     └── project-structure.md
 ```
+
+See the [usage guide](docs/usage-guide.md) for the current public API and examples. See the [project structure reference](docs/project-structure.md) for module ownership and runtime flow. See the [framework gaps](docs/framework-gaps.md) for the implementation backlog, and the [documentation guide](docs/documentation-guide.md) for the Confluence-style documentation contract used by contributors and agents.
 
 ## Requirements
 
@@ -57,6 +62,15 @@ The demo prints the rendered view tree for `CounterScreen`, increments the count
 `CounterScreen` extends `VelaComponent` and uses `@State` for mutable state. When the state changes, `StateManager` marks the component dirty, and `VelaRenderer` can render the current `ViewNode` tree.
 
 The annotation processor in `vela-compiler` is intentionally small for now. Its job is to keep state usage honest and provide a dedicated place for compile-time generation later if you want to expand the framework.
+
+## Documentation
+
+| Page | Purpose |
+| --- | --- |
+| [`docs/usage-guide.md`](docs/usage-guide.md) | How to build components, use state, create view trees, render output, and test behavior |
+| [`docs/project-structure.md`](docs/project-structure.md) | Module ownership, package map, dependency flow, and runtime flow |
+| [`docs/framework-gaps.md`](docs/framework-gaps.md) | Missing framework capabilities and a suggested implementation order |
+| [`docs/documentation-guide.md`](docs/documentation-guide.md) | Documentation format, ownership, and maintenance workflow |
 
 ## Verification
 
