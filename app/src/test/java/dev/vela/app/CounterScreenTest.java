@@ -10,8 +10,9 @@ class CounterScreenTest {
     void incrementMarksTheScreenDirtyAndUpdatesTheRenderTree() {
         CounterScreen screen = new CounterScreen();
 
-        screen.increment();
+        boolean handled = screen.render().children().get(2).dispatch("click");
 
+        assertTrue(handled);
         assertTrue(screen.isDirty());
         assertTrue(new VelaRenderer().render(screen.render()).contains("Current value: 1"));
     }
