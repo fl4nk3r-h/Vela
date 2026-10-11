@@ -8,7 +8,7 @@ Vela is a Java 21 workspace with a reusable UI runtime, annotation processor, co
 
 ## Modules
 
-- `vela-core` contains the shared runtime model, immutable modifiers and typography, payload-aware UI events, and a broad declarative component catalog.
+- `vela-core` contains observable state, a mounted runtime, keyed renderer reconciliation, immutable modifiers and typography, payload-aware UI events, and a broad component catalog.
 - `vela-compiler` contains the annotation processor used to validate `@State` usage during compilation.
 - `app` contains the demo application and the first real screen component, `CounterScreen`.
 - `showcase-android` contains Daymark, a polished native Android application and Vela-to-Android renderer.
@@ -35,11 +35,14 @@ Vela/
     ├── components.md
     ├── framework-gaps.md
     ├── usage-guide.md
+    ├── runtime-guide.md
     ├── documentation-guide.md
     └── project-structure.md
 ```
 
 See the [usage guide](docs/usage-guide.md) for the current public API and examples. The [component reference](docs/components.md) covers layouts, controls, modifiers, events, navigation, feedback, overlays, and data display. See the [framework gaps](docs/framework-gaps.md) for the remaining implementation backlog.
+
+The [runtime guide](docs/runtime-guide.md) documents observable state, deferred updates, lifecycle hooks, and retained backend handles.
 
 ## Requirements
 
@@ -73,7 +76,7 @@ The demo prints the rendered view tree for `CounterScreen`, increments the count
 
 ## How the Pieces Fit Together
 
-`CounterScreen` extends `VelaComponent` and uses `@State` for mutable state. When the state changes, `StateManager` marks the component dirty, and `VelaRenderer` can render the current `ViewNode` tree.
+`CounterScreen` extends `VelaComponent` and owns a `MutableState<Integer>`. Changed values automatically mark it dirty. `VelaRuntime` batches root updates and reconciles its tree through `TextRendererBackend`, retaining matching handles and refreshing event callbacks. Legacy `@State` validation and direct `VelaRenderer` output remain supported.
 
 The annotation processor in `vela-compiler` is intentionally small for now. Its job is to keep state usage honest and provide a dedicated place for compile-time generation later if you want to expand the framework.
 
@@ -82,6 +85,7 @@ The annotation processor in `vela-compiler` is intentionally small for now. Its 
 | Page | Purpose |
 | --- | --- |
 | [`docs/usage-guide.md`](docs/usage-guide.md) | How to build components, use state, create view trees, render output, and test behavior |
+| [`docs/runtime-guide.md`](docs/runtime-guide.md) | Observable state, mounted runtime, scheduling, lifecycle, identity, and renderer contracts |
 | [`docs/components.md`](docs/components.md) | Complete component catalog, modifiers, events, semantics, and renderer contract |
 | [`docs/project-structure.md`](docs/project-structure.md) | Module ownership, package map, dependency flow, and runtime flow |
 | [`docs/framework-gaps.md`](docs/framework-gaps.md) | Missing framework capabilities and a suggested implementation order |
