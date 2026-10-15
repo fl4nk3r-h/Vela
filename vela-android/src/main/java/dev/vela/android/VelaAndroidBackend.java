@@ -157,6 +157,7 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
         if (!previous.props().equals(next.props())) {
             layoutChildren(h);
             if (h.parent != null) layoutChildren(h.parent);
+            else if (root == h) applyRootSize(h);
         }
     }
 
@@ -549,8 +550,15 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
         if (root == next) return;
         if (root != null) container.removeView(root.view);
         root = next;
-        if (next != null) container.addView(next.view, new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        if (next != null) {
+            applyRootSize(next);
+            container.addView(next.view);
+        }
+    }
+
+    private void applyRootSize(Handle h) {
+        h.view.setLayoutParams(new ViewGroup.LayoutParams(dimension(h.node.props().get("style.width"), ViewGroup.LayoutParams.MATCH_PARENT),
+                dimension(h.node.props().get("style.height"), ViewGroup.LayoutParams.MATCH_PARENT)));
     }
 
     @Override public void dispose(Handle h) {

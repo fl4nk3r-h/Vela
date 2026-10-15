@@ -118,10 +118,10 @@ public final class AndroidBackendTest extends InstrumentationTestCase {
                 SeekBar bar = (SeekBar) runtime.root().widget(); bar.setKeyProgressIncrement(1);
                 assertEquals(5, bar.getMax());
                 bar.onKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT));
-                assertEquals(2.0, screen.value.get());
+                assertEquals(2.0, screen.value.get(), 0.000001);
                 runtime.flush(); assertSame(bar, runtime.root().widget());
                 bar.onKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT));
-                assertEquals(4.0, screen.value.get());
+                assertEquals(4.0, screen.value.get(), 0.000001);
                 runtime.flush(); assertSame(bar, runtime.root().widget());
             }
         });

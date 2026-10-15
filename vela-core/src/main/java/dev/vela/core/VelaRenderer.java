@@ -6,18 +6,18 @@ import java.util.Map;
 public final class VelaRenderer {
     public String render(ViewNode node) {
         StringBuilder builder = new StringBuilder();
-        render(node, builder, 0);
+        render(node, builder, 0, false);
         return builder.toString();
     }
 
-    private void render(ViewNode node, StringBuilder builder, int depth) {
-        boolean sensitive = "password".equals(node.props().get("inputType"))
+    private void render(ViewNode node, StringBuilder builder, int depth, boolean inheritedSensitive) {
+        boolean sensitive = inheritedSensitive || "password".equals(node.props().get("inputType"))
                 || Boolean.parseBoolean(node.props().get("semantics.sensitive"));
         builder.append("  ".repeat(Math.max(0, depth)))
             .append(node.type());
 
         if (node.key() != null) {
-            builder.append("#").append(node.key());
+            builder.append("#").append(sensitive ? "<redacted>" : node.key());
         }
 
         if (node.text() != null) {
@@ -42,7 +42,7 @@ public final class VelaRenderer {
         builder.append(System.lineSeparator());
 
         for (ViewNode child : node.children()) {
-            render(child, builder, depth + 1);
+            render(child, builder, depth + 1, sensitive);
         }
     }
 }
