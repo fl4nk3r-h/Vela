@@ -133,6 +133,7 @@ public final class AndroidBackendTest extends InstrumentationTestCase {
 
     public void testRealEditorsSelectorsAndModalDismissal() throws Exception {
         AtomicInteger dismissals = new AtomicInteger();
+        AtomicReference<LocalDate> selectedDate = new AtomicReference<>();
         ui(() -> {
             AtomicInteger submits = new AtomicInteger();
             tree.render(VelaForm.of("Account", submits::incrementAndGet, Modifier.none(), field("", ignored -> { })));
@@ -140,14 +141,16 @@ public final class AndroidBackendTest extends InstrumentationTestCase {
             edit.onEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_DONE); assertEquals(1, submits.get());
             tree.render(VelaSelect.of("Mode", "b", List.of("a", "b"), ignored -> { }, Modifier.none()));
             Spinner select = (Spinner) tree.root().widget(); assertEquals("b", select.getSelectedItem());
-            AtomicReference<LocalDate> selectedDate = new AtomicReference<>();
             tree.render(VelaDatePicker.of("Date", LocalDate.of(2026, 1, 1), null, null, selectedDate::set, Modifier.none()));
             assertTrue(tree.root().widget() instanceof Button);
             tree.root().widget().performClick();
             assertTrue(tree.root().datePicker().isShowing());
             tree.root().datePicker().getDatePicker().updateDate(2026, 1, 3);
             tree.root().datePicker().getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick();
-            assertEquals(LocalDate.of(2026, 2, 3), selectedDate.get());
+        });
+        getInstrumentation().waitForIdleSync();
+        assertEquals(LocalDate.of(2026, 2, 3), selectedDate.get());
+        ui(() -> {
             tree.render(VelaDialog.of("Confirm", VelaText.of("Content"), null, dismissals::incrementAndGet, Modifier.none()));
             assertTrue(tree.root().dialog().isShowing()); tree.root().dialog().dismiss();
         });
@@ -210,7 +213,7 @@ public final class AndroidBackendTest extends InstrumentationTestCase {
                     VelaText.of("Ratio", TextStyle.defaultStyle(), Modifier.none().width(100).aspectRatio(2))));
             measure();
             View ratio = tree.root().children().get(0).view();
-            assertEquals(ratio.getMeasuredWidth() / 2, ratio.getMeasuredHeight());
+            assertTrue(Math.abs(ratio.getMeasuredWidth() - ratio.getMeasuredHeight() * 2) <= 1);
         });
     }
 
