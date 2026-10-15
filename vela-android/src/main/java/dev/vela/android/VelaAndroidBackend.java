@@ -280,7 +280,12 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
                 }
                 @Override public void afterTextChanged(Editable text) { }
             });
-            edit.setOnEditorActionListener((view, action, event) -> h.dispatch("submit", null));
+            edit.setOnEditorActionListener((view, action, event) -> {
+                for (Handle scope = h; scope != null; scope = scope.parent) {
+                    if (scope.node.eventNames().contains("submit")) return scope.dispatch("submit", null);
+                }
+                return false;
+            });
         } else if (h.widget instanceof Spinner spinner) {
             spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
                 @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
@@ -408,6 +413,12 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
     }
 
     private void bindClick(Handle h) {
+        if (h.node.type().equals("segment")) {
+            h.widget.setOnClickListener(view -> {
+                if (h.parent != null && h.enabled()) h.parent.dispatch("change", h.node.props().get("value"));
+            });
+            return;
+        }
         if (h.widget instanceof CompoundButton || h.widget instanceof EditText || h.widget instanceof Spinner
                 || h.node.type().equals("date-picker")) return;
         String event = null;
@@ -595,9 +606,11 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
         h.widget.setAccessibilityDelegate(role == null ? null : new View.AccessibilityDelegate() {
             @Override public void onInitializeAccessibilityNodeInfo(View host, AccessibilityNodeInfo info) {
                 super.onInitializeAccessibilityNodeInfo(host, info);
+                if (h.node == null) return;
                 info.setClassName(switch (role) {
                     case "button", "tab", "menuitem", "link" -> Button.class.getName();
                     case "checkbox" -> CheckBox.class.getName(); case "switch" -> Switch.class.getName();
+                    case "radio" -> RadioButton.class.getName();
                     case "slider" -> SeekBar.class.getName(); case "list" -> ListView.class.getName();
                     case "grid", "table" -> GridView.class.getName(); case "progressbar" -> ProgressBar.class.getName();
                     default -> host.getClass().getName();
