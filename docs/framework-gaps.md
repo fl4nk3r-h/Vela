@@ -1,124 +1,73 @@
 # Framework Gaps
 
+This page tracks remaining capabilities after the framework audit fixes. Implemented behavior and remaining limitations are separated explicitly.
+
 ## Page Metadata
 
 | Field | Value |
 | --- | --- |
 | Status | Active |
-| Audience | Maintainers and implementation agents |
+| Audience | Maintainers and contributors |
 | Owner | Vela maintainers |
-| Scope | Missing framework capabilities observed in the current repository |
-
-## Overview
-
-This page lists the practical gaps between Vela's current kernel and a more complete Compose-like framework. It is intentionally implementation-facing: each gap describes what is missing, why it matters, and a likely starting point.
+| Scope | Runtime, backend, developer experience, and remaining roadmap |
 
 ## Current Baseline
 
-Vela currently has:
+Vela now provides observable state, mounted root and keyed child scopes, deferred scheduling, owner-thread checks, retained type/key reconciliation, immutable node descriptions, typed property keys with a compatible string wire map, validated shared properties, sensitive diagnostic redaction, explicit saveable state codecs, mount-owned disposal, and background-result dispatch.
 
-| Capability | Current implementation |
-| --- | --- |
-| Component base class | `VelaComponent` with `render()`, `markDirty()`, `isDirty()`, and `consumeDirty()` |
-| State annotation | `@State` with source retention |
-| State validation | `StateProcessor` rejects non-field usage, final fields, and fields outside a `VelaComponent` |
-| Dirty tracking | `StateManager` stores a single atomic dirty flag per component |
-| Observable state | `MutableState<T>` automatically invalidates its owner and skips equal writes |
-| Mounted runtime | `VelaRuntime` batches root updates, enforces its thread, and runs root lifecycle hooks |
-| Reconciliation | `MountedTree` retains handles by type/key and validates duplicate sibling keys |
-| View model | Immutable `ViewNode` with stable keys, text, string props, children, and payload-aware event handlers |
-| Built-in nodes | Broad catalog across layout, content, inputs, feedback, navigation, overlays, and data display |
-| UI configuration | Immutable `Modifier`, `TextStyle`, layout enums, and semantic component variants |
-| Interaction | Named events with validated payload dispatch through `ViewNode` |
-| Renderer | `RendererBackend` contract, retained `TextRendererBackend`, and direct `VelaRenderer` output |
-| Demo | `CounterScreen` and `App` |
-| Tests | Compiler, view-node, modifier, catalog, state, scheduling, reconciliation, cleanup, and counter integration tests |
+The reusable `vela-android` module supplies native widgets, frame scheduling and cancellation, image loading, modals and pickers, native view restoration, and virtualized list/grid adapters. Daymark consumes this module and restores saveable screen state on Activity recreation. Unknown Android node types and unknown namespaced properties produce explicit diagnostics.
 
-## High-Priority Gaps
+JVM regression tests and Android instrumented conformance tests are checked in. CI defines JVM verification and Android API 26/35 emulator jobs. See [audit remediation](audit-remediation.md) for local execution results and the [Android capability matrix](android-backend.md) for supported behavior.
 
-| Gap | Why it matters | Starting point |
+## Remaining Runtime Work
+
+| Capability | Current behavior | Further work |
 | --- | --- | --- |
-| Fine-grained recomposition | Observable state invalidates the whole root component | Track reads in child composition scopes and skip unchanged subtrees |
-| Platform frame integration | The runtime has a deferred scheduler contract, but no platform adapter | Bind Android scheduling to its UI frame loop and lifecycle |
-| Typed props | `ViewNode` only accepts `Map<String, String>` | Introduce a typed prop model that supports values, callbacks, styles, and accessibility metadata |
-| Android backend migration | Core backend contracts exist; the Android showcase still recreates its hierarchy | Adapt native view creation, property updates, child ordering, and disposal to `RendererBackend` |
-| Phase-specific invalidation | The core retains host handles but traverses the whole root tree | Separate structural, layout, and paint updates after profiling |
-| Renderer conformance | Components expose rich layout, styling, and semantic metadata without a graphical backend | Define backend conformance tests for supported nodes and properties |
-| Component composition | Components cannot directly mount child components with lifecycle boundaries | Add a composition context that can render child components and preserve state |
+| Dependency tracking | Child scopes invalidate independently; a parent render refreshes its children | Track arbitrary cross-owner state reads and derived state subscriptions |
+| Phase-specific invalidation | Cached descriptions skip reconciliation; changed descriptions patch native properties | Separate structural, layout, and paint invalidation if profiling justifies it |
+| Error recovery | Failures surface; removal and scope cleanup continue across failures | Define error boundaries and recovery after partially applied backend mutations |
+| Effects | `onDispose` owns cancellation; `dispatch` marshals results | Higher-level task/effect APIs and pause/resume semantics |
+| State migration | Explicit codecs and keyed snapshots | Versioned application migrations and schema evolution |
+| Scheduler portability | Generic deferred contract; thread-safe Android adapter | Other platform adapters and standard cancellation tokens |
 
-## State And Compiler Gaps
+## Remaining View And Backend Work
 
-| Gap | Current behavior | Desired direction |
+| Capability | Current behavior | Further work |
 | --- | --- | --- |
-| No generated code | `StateProcessor` validates only | Generate helpers or diagnostics that make correct state usage easier |
-| No raw-field mutation detection | Direct annotated field writes still require `markDirty()` | Prefer observable holders; explicitly decide whether legacy setters should be generated |
-| Source retention only | Runtime cannot inspect state annotations | Keep source retention if generation handles state, or use runtime metadata intentionally |
-| Limited processor coverage | Valid owners, indirect subclasses, and invalid fields are covered | Add fixtures alongside every new generation or validation rule |
+| Typed schema | Typed property keys and shared validation; legacy `props()` uses string wire values | A complete per-node schema and generated backend contracts |
+| Collection identity | Lazy adapters use stable keys; eager nodes use keyed reconciliation | More collection-level diagnostics and stable data-diff updates |
+| Styling | Native basic styles and public modifier support | Rich themes, animation, spans, advanced typography, and visual regression coverage |
+| Accessibility | Native controls, descriptions, roles, keyboard/accessibility activation tests | Broader assistive technology/device coverage and richer collection announcements |
+| Icons | Small native glyph mapping | Pluggable icon packs and vector resources |
+| Snackbar | Application-controlled inline status/action | Optional timed overlay behavior |
+| Custom nodes | Explicit unsupported-node diagnostics on Android | Extension registration and conformance contracts for custom widgets |
+| Other platforms | Text and Android backends | Desktop, browser, or terminal adapters |
+| Media and drawing | Images and custom node descriptions | Standard audio/video, canvas/charts, drag-and-drop, and file picker contracts |
 
-## Runtime Gaps
+## State Annotation
 
-| Gap | Current behavior | Desired direction |
-| --- | --- | --- |
-| No child component scopes | The runtime mounts one root component with a view tree | Preserve child component state and lifecycle by stable identity |
-| No lifecycle-bound effects | Root mount/unmount hooks exist without an effect/cancellation API | Add scoped work, cancellation, and state restoration |
-| No physical callback cancellation | Closing invalidates queued callbacks but cannot remove them from a platform queue | Extend platform adapters with cancellation where useful |
-| No read dependency tracking | Dirty state invalidates the root owner | Track child subscriptions and derived values |
-| No background-state integration | Mounted state is thread-confined; unmounted state remains caller-managed | Marshal background results through a documented UI dispatcher |
+`@State` remains validation-only and source-retained. It does not observe raw field mutation or generate setters. New code should use observable holders. In-place mutation of objects already held in state is not observed; replace immutable values through `set` or `update`.
 
-## View Tree Gaps
+## Release And Performance Work
 
-| Gap | Current behavior | Desired direction |
-| --- | --- | --- |
-| Limited backend conformance | Keyed retention is tested using text and recording backends | Verify real native focus, cursor, scrolling, and gesture retention |
-| No semantic backend | Components expose roles, labels, and descriptions | Map semantics to platform accessibility APIs in each renderer |
-| No custom text escaping rules | Renderer prints text directly | Define renderer-safe escaping or structured output |
-| No children validation | Any node type can have any children through `ViewNode.node()` | Add component-level or renderer-level validation |
-| No lazy content factories | Named slot nodes exist, but collection content is created eagerly | Add keyed item factories once the mounted runtime exists |
+- The project is experimental and has no stable API guarantee yet. Public API changes must be documented and covered by regression tests.
+- Native adapters and new composition APIs need broader application examples and device coverage.
+- Operation-count tests and lazy-materialization tests provide regression bounds; frame-time/allocation benchmarks and performance tracing remain future work.
+- Maven publication, signed releases, and an external compatibility policy are not configured.
+- CI workflow execution on GitHub follows normal repository push/PR operations; adding the workflow locally does not establish a remote green run.
 
-## Remaining Component Library Gaps
+## Suggested Next Milestones
 
-| Missing capability | Notes |
-| --- | --- |
-| Virtualized collections | `VelaList` and `VelaGrid` describe content but do not lazily mount large data sets |
-| Rich text and editing | Styled text exists, but spans, selection, and document editing do not |
-| Canvas and charts | Custom node construction is available, but no drawing API is standardized |
-| Media playback | Images are described; audio and video lifecycle APIs are not defined |
-| Drag and drop | The event model exists, but pointer gestures and transfer payloads are not standardized |
-| Platform pickers | File, color, and time pickers require backend capability contracts |
-
-## Documentation And Developer Experience Gaps
-
-| Gap | Why it matters |
-| --- | --- |
-| No architecture decision records | Major API choices will be hard to trace |
-| No roadmap page | Implementation order is implicit |
-| No examples beyond counter | Hard to validate API ergonomics |
-| No release or compatibility policy | Public API stability is undefined |
-| No contribution guide beyond agent notes | Human contributors need testing, style, and review expectations |
-
-## Suggested Implementation Order
-
-1. Adapt the Android renderer to the retained backend contract and a platform frame scheduler.
-2. Define typed props and stable layout/modifier semantics.
-3. Complete text editing, images, semantics, and native backend conformance.
-4. Add child component composition, dependency tracking, saveable state, and effects.
-5. Add lazy collections and phase-specific invalidation.
-6. Establish release benchmarks, tracing, and performance regression gates.
-
-## Candidate First Milestones
-
-| Milestone | Outcome |
-| --- | --- |
-| Interactive counter kernel | Implemented: button click events call `CounterScreen.increment()` through `ViewNode.dispatch` |
-| Safer state | Implemented for observable holders; raw annotated fields remain manually invalidated |
-| Renderer contract | Implemented in core and the retained text backend; Android migration remains planned |
-| Mounted runtime | Implemented for one root with deferred scheduling, keyed retention, and teardown |
-| Basic layout vocabulary | Implemented and expanded into the full catalog documented in `components.md` |
+1. Expand minimum-API and accessibility coverage, plus visual regression fixtures.
+2. Add real application benchmarks for editing, scrolling, large lists, and child-scope updates.
+3. Design typed node schemas and custom-widget extension contracts while retaining wire compatibility.
+4. Add error boundaries and higher-level lifecycle-aware tasks based on application needs.
+5. Establish release artifacts, compatibility expectations, and contribution guidance before external adoption.
 
 ## Related Pages
 
-- [`usage-guide.md`](usage-guide.md)
-- [`components.md`](components.md)
-- [`runtime-guide.md`](runtime-guide.md)
-- [`project-structure.md`](project-structure.md)
-- [`documentation-guide.md`](documentation-guide.md)
+- [Audit remediation](audit-remediation.md)
+- [Android backend](android-backend.md)
+- [Runtime guide](runtime-guide.md)
+- [Component reference](components.md)
+- [README](../README.md)

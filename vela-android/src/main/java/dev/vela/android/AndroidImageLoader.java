@@ -10,6 +10,8 @@ import android.os.Looper;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.FilterInputStream;
+import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.concurrent.ExecutorService;
@@ -40,34 +42,15 @@ final class AndroidImageLoader implements ImageLoader, AutoCloseable {
         return () -> { cancelled.set(true); task.cancel(true); };
     }
 
+    // Drawable names are part of the public source URI contract; resource shrinking needs keep rules for them.
+    @android.annotation.SuppressLint("DiscouragedApi")
     private Drawable read(String source) throws Exception {
         if (source.startsWith("@drawable/")) {
             int id = context.getResources().getIdentifier(source.substring(10), "drawable", context.getPackageName());
             if (id == 0) throw new IllegalArgumentException("Unknown drawable resource");
             return context.getDrawable(id);
         }
-        HttpURLConnection connection = null;
-        InputStream stream;
-        Uri uri = Uri.parse(source);
-        if ("https".equals(uri.getScheme())) {
-            connection = (HttpURLConnection) new URL(source).openConnection();
-            connection.setConnectTimeout(5000);
-            connection.setReadTimeout(5000);
-            connection.setInstanceFollowRedirects(false);
-            if (connection.getResponseCode() != 200) {
-                connection.disconnect();
-                throw new IllegalArgumentException("Image request failed; redirects require an injected loader");
-            }
-            stream = connection.getInputStream();
-        } else if ("content".equals(uri.getScheme()) || "file".equals(uri.getScheme())
-                || "android.resource".equals(uri.getScheme())) {
-            stream = context.getContentResolver().openInputStream(uri);
-        } else if (uri.getScheme() == null) {
-            stream = context.getAssets().open(source);
-        } else {
-            throw new IllegalArgumentException("Unsupported image scheme");
-        }
-        try (InputStream input = stream; ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
+        try (InputStream input = open(source); ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
             if (input == null) throw new IllegalArgumentException("Image source not found");
             byte[] buffer = new byte[8192];
             int size;
@@ -88,9 +71,29 @@ final class AndroidImageLoader implements ImageLoader, AutoCloseable {
             Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length, options);
             if (bitmap == null) throw new IllegalArgumentException("Unsupported image data");
             return new BitmapDrawable(context.getResources(), bitmap);
-        } finally {
-            if (connection != null) connection.disconnect();
         }
+    }
+
+    private InputStream open(String source) throws Exception {
+        Uri uri = Uri.parse(source);
+        if ("https".equals(uri.getScheme())) {
+            HttpURLConnection connection = (HttpURLConnection) new URL(source).openConnection();
+            try {
+                connection.setConnectTimeout(5000); connection.setReadTimeout(5000);
+                connection.setInstanceFollowRedirects(false);
+                if (connection.getResponseCode() != 200) throw new IllegalArgumentException("Image request failed; redirects require an injected loader");
+                return new FilterInputStream(connection.getInputStream()) {
+                    @Override public void close() throws IOException {
+                        try { super.close(); } finally { connection.disconnect(); }
+                    }
+                };
+            } catch (Exception error) { connection.disconnect(); throw error; }
+        }
+        if ("content".equals(uri.getScheme()) || "file".equals(uri.getScheme()) || "android.resource".equals(uri.getScheme())) {
+            return context.getContentResolver().openInputStream(uri);
+        }
+        if (uri.getScheme() == null) return context.getAssets().open(source);
+        throw new IllegalArgumentException("Unsupported image scheme");
     }
 
     @Override public void close() { workers.shutdownNow(); }

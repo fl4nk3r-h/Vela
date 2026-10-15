@@ -7,6 +7,7 @@
         <item name="android:navigationBarColor">@color/daymark_navigation</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:colorAccent">@color/daymark_emerald</item>
+        <item name="android:textColorPrimary">@color/daymark_ink</item>
         <item name="android:windowNoTitle">true</item>
     </style>
 </resources>

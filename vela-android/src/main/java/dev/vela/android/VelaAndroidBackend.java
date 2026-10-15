@@ -150,6 +150,13 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
         checkOpen(); validate(next);
         h.node = next;
         boolean rebuilt = !shape(previous).equals(shape(next));
+        if (!rebuilt && previous.props().equals(next.props()) && Objects.equals(previous.text(), next.text())
+                && previous.eventNames().equals(next.eventNames()) && previous.lazyContent() == next.lazyContent()
+                && (!next.type().equals("select") || previous.children().stream().map(ViewNode::props).toList()
+                        .equals(next.children().stream().map(ViewNode::props).toList()))) {
+            // Listeners read h.node dynamically; callback-only updates need no native layout/property work.
+            return;
+        }
         if (rebuilt) {
             cancelImage(h);
             if (h.adapter != null) { h.adapter.close(); h.adapter = null; }
@@ -255,7 +262,7 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
         if (type.equals("pagination")) {
             h.title = label();
             Button previous = button(), next = button();
-            previous.setText("Previous"); next.setText("Next");
+            previous.setText(R.string.vela_previous); next.setText(R.string.vela_next);
             previous.setOnClickListener(v -> h.dispatch("change", integer(h.node, "currentPage", 1) - 1));
             next.setOnClickListener(v -> h.dispatch("change", integer(h.node, "currentPage", 1) + 1));
             h.previous = previous; h.next = next;
@@ -356,7 +363,7 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
             if (type.equals("key-value-item")) h.title.setText(props.getOrDefault("key", ""));
             if (type.equals("pagination")) {
                 int page = integer(n, "currentPage", 1), count = integer(n, "pageCount", 1);
-                h.title.setText(page + " / " + count); h.previous.setEnabled(page > 1); h.next.setEnabled(page < count);
+                h.title.setText(context.getString(R.string.vela_page_count, page, count)); h.previous.setEnabled(page > 1); h.next.setEnabled(page < count);
             }
             if (h.action != null) bindAction(h);
             if (h.widget instanceof SeekBar bar) {
@@ -407,9 +414,12 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
         boolean shown = type.equals("accordion-item") || h.node.eventNames().contains(event);
         h.action.setVisibility(shown ? View.VISIBLE : View.GONE);
         h.action.setText(switch (type) {
-            case "form" -> "Submit"; case "snackbar" -> h.node.props().getOrDefault("actionLabel", "Action");
-            case "alert" -> "Dismiss"; case "chip" -> "Remove"; case "code-block" -> "Copy";
-            default -> bool(h.node, "expanded", false) ? "Collapse" : "Expand";
+            case "form" -> context.getString(R.string.vela_submit);
+            case "snackbar" -> h.node.props().getOrDefault("actionLabel", context.getString(R.string.vela_action));
+            case "alert" -> context.getString(R.string.vela_dismiss);
+            case "chip" -> context.getString(R.string.vela_remove);
+            case "code-block" -> context.getString(R.string.vela_copy);
+            default -> context.getString(bool(h.node, "expanded", false) ? R.string.vela_collapse : R.string.vela_expand);
         });
         h.action.setOnClickListener(v -> {
             if (!h.enabled()) return;

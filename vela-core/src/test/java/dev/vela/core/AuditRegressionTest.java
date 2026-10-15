@@ -169,6 +169,42 @@ class AuditRegressionTest {
     }
 
     @Test
+    void restoredChildSnapshotIsConsumedOnceAcrossRemounts() {
+        Parent parent = new Parent();
+        parent.restoreState(new StateSnapshot(java.util.Map.of(), java.util.Map.of("first",
+                new StateSnapshot(java.util.Map.of("value", "4"), java.util.Map.of()))));
+        try (var runtime = new VelaRuntime<>(parent, new TextRendererBackend(), callback -> { })) {
+            runtime.mount();
+            assertEquals(4, parent.first.value.get());
+            parent.first.value.set(5);
+            parent.showFirst.set(false); runtime.flush();
+            parent.showFirst.set(true); runtime.flush();
+            assertEquals(5, parent.first.value.get());
+            assertEquals(2, parent.first.mounts);
+        }
+    }
+
+    @Test
+    void scopedCleanupContinuesAndReleasesOwnershipAfterFailure() {
+        AtomicInteger released = new AtomicInteger();
+        VelaComponent component = new VelaComponent() {
+            @Override protected void onMount() {
+                onDispose(released::incrementAndGet);
+                onDispose(() -> { throw new IllegalArgumentException("cancel failed"); });
+            }
+            @Override public ViewNode render() { return VelaText.of("Mounted"); }
+        };
+        var first = new VelaRuntime<>(component, new TextRendererBackend(), callback -> { });
+        first.mount();
+        assertThrows(IllegalStateException.class, first::close);
+        assertEquals(1, released.get());
+        var second = new VelaRuntime<>(component, new TextRendererBackend(), callback -> { });
+        second.mount();
+        assertThrows(IllegalStateException.class, second::close);
+        assertEquals(2, released.get());
+    }
+
+    @Test
     void dispatchedBackgroundResultsRunOnOwnerAndAreDroppedAfterClose() throws Exception {
         Parent parent = new Parent();
         var callbacks = new java.util.concurrent.ConcurrentLinkedQueue<Runnable>();

@@ -20,9 +20,10 @@ Vela is a Java 21 Gradle workspace split into reusable runtime, compiler, consol
 | `vela-core` | Runtime component model, immutable view tree, UI catalog, modifiers, events, state dirtiness, and text rendering | No project dependency |
 | `vela-compiler` | Annotation processor that validates `@State` fields | Depends on `vela-core` |
 | `app` | Runnable counter example and integration tests | Depends on `vela-core`; applies `vela-compiler` as an annotation processor |
-| `showcase-android` | Native Daymark application and Android `View` renderer | Depends on `vela-core`; applies `vela-compiler` as an annotation processor |
+| `vela-android` | Retained native widgets, frame scheduling, image loading, lazy adapters, and Bundle state | Depends on `vela-core` |
+| `showcase-android` | Native Daymark application and Activity integration | Depends on `vela-android`; applies `vela-compiler` as an annotation processor |
 
-Keep shared framework behavior in `vela-core`. Keep compile-time checks in `vela-compiler`. Keep console examples in `app` and Android-specific rendering in `showcase-android` until a dedicated backend module is introduced.
+Keep shared framework behavior in `vela-core`. Keep compile-time checks in `vela-compiler`. Keep console examples in `app`, reusable Android behavior in `vela-android`, and showcase-only screens in `showcase-android`. Android modules are optional; `-Pandroid=false` excludes them, while `-Pandroid=true` enables them.
 
 ## Package Map
 
@@ -47,11 +48,15 @@ Keep shared framework behavior in `vela-core`. Keep compile-time checks in `vela
 | --- | --- | --- |
 | `dev.vela.app` | `App`, `CounterScreen` | Demonstrates state mutation, dirty tracking, and rendering |
 
+### `vela-android`
+
+`dev.vela.android` contains `VelaAndroidBackend`, `AndroidFrameScheduler`, `AndroidState`, and `ImageLoader`. Instrumented tests live in `src/androidTest`.
+
 ### `showcase-android`
 
 | Package | Key types | Responsibility |
 | --- | --- | --- |
-| `dev.vela.showcase` | `DaymarkScreen`, `VelaAndroidRenderer`, `MainActivity` | Builds a rich Vela tree, maps it to native Android views, and schedules rerenders |
+| `dev.vela.showcase` | `DaymarkScreen`, `MainActivity` | Builds a Vela tree, mounts the shared backend, and saves/restores Activity state |
 
 ## Dependency Flow
 
@@ -61,13 +66,13 @@ app
 └── annotation processor ─> vela-compiler ──> vela-core
 
 showcase-android
-├── runtime dependency ──> vela-core
+├── runtime dependency ──> vela-android ──> vela-core
 └── annotation processor ─> vela-compiler ──> vela-core
 ```
 
 The compiler is active during `app` compilation. It does not replace runtime state management; it validates source-level use of `@State` before the application runs.
 
-Daymark follows the same state flow, but `VelaAndroidRenderer` maps the tree to native views. Native callbacks dispatch node events, `MainActivity` consumes the dirty flag, and the screen is rendered again.
+Daymark follows the same retained runtime flow through `VelaAndroidBackend` and `AndroidFrameScheduler`. Its saveable observable state is restored before mounting; native view state is restored afterward. The Activity closes the runtime, backend, and scheduler on destruction.
 
 ## Runtime Flow
 
@@ -96,6 +101,8 @@ Vela/
 │       └── ui/
 ├── vela-compiler/
 │   └── src/main/java/dev/vela/processor/StateProcessor.java
+├── vela-android/
+│   └── src/main/java/dev/vela/android/
 ├── showcase-android/
 │   └── src/main/java/dev/vela/showcase/
 └── docs/
@@ -109,7 +116,7 @@ Vela/
 
 ## Verification Commands
 
-Run the complete test suite:
+Run local JVM tests (and Android unit test tasks when Android modules are enabled):
 
 ```bash
 ./gradlew test
@@ -124,10 +131,10 @@ Run the executable demonstration:
 Build the Android showcase:
 
 ```bash
-./gradlew :showcase-android:assembleDebug --no-configuration-cache
+./gradlew -Pandroid=true :showcase-android:assembleDebug --no-configuration-cache
 ```
 
-The demo logs the initial counter tree, increments the counter, consumes the dirty flag, and logs the updated tree.
+The demo logs the initial counter tree, increments the counter, drains its scheduled frame, and logs the updated tree. Device tests and native capabilities are described in [Android backend](android-backend.md).
 
 ## Related Pages
 

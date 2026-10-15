@@ -10,8 +10,9 @@ Vela is a Java 21 workspace with a reusable UI runtime, annotation processor, co
 
 - `vela-core` contains observable state, a mounted runtime, keyed renderer reconciliation, immutable modifiers and typography, payload-aware UI events, and a broad component catalog.
 - `vela-compiler` contains the annotation processor used to validate `@State` usage during compilation.
+- `vela-android` contains the reusable retained Android backend, frame scheduler, image loader, and Bundle state adapter.
 - `app` contains the demo application and the first real screen component, `CounterScreen`.
-- `showcase-android` contains Daymark, a polished native Android application and Vela-to-Android renderer.
+- `showcase-android` contains Daymark, a native Android application consuming `vela-android`.
 
 ## Project Structure
 
@@ -31,7 +32,11 @@ Vela/
 │   └── src/main/java/dev/vela/processor/StateProcessor.java
 ├── showcase-android/
 │   └── src/main/java/dev/vela/showcase/
+├── vela-android/
+│   └── src/main/java/dev/vela/android/
 └── docs/
+    ├── android-backend.md
+    ├── audit-remediation.md
     ├── components.md
     ├── framework-gaps.md
     ├── usage-guide.md
@@ -58,6 +63,8 @@ Run the tests to verify the workspace:
 ./gradlew test
 ```
 
+Android modules are included automatically when `ANDROID_HOME` or `ANDROID_SDK_ROOT` points to an SDK directory. Without an SDK, the default test command verifies the JVM modules. Use `-Pandroid=false` for an explicitly JVM-only build, or `-Pandroid=true` to enable Android modules (including SDK configuration through `local.properties`).
+
 Run the demo app:
 
 ```bash
@@ -67,7 +74,7 @@ Run the demo app:
 Build the Android showcase:
 
 ```bash
-./gradlew :showcase-android:assembleDebug --no-configuration-cache
+./gradlew -Pandroid=true :showcase-android:assembleDebug --no-configuration-cache
 ```
 
 See [`showcase-android/README.md`](showcase-android/README.md) for device installation and launch commands.
@@ -84,6 +91,8 @@ The annotation processor in `vela-compiler` is intentionally small for now. Its 
 
 | Page | Purpose |
 | --- | --- |
+| [`docs/android-backend.md`](docs/android-backend.md) | Native backend capabilities, mounting, lifecycle, image loading, and device tests |
+| [`docs/audit-remediation.md`](docs/audit-remediation.md) | Audit fixes, regression coverage, and remaining boundaries |
 | [`docs/usage-guide.md`](docs/usage-guide.md) | How to build components, use state, create view trees, render output, and test behavior |
 | [`docs/runtime-guide.md`](docs/runtime-guide.md) | Observable state, mounted runtime, scheduling, lifecycle, identity, and renderer contracts |
 | [`docs/components.md`](docs/components.md) | Complete component catalog, modifiers, events, semantics, and renderer contract |
