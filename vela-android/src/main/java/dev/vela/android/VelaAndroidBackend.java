@@ -9,6 +9,7 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Looper;
+import android.os.Bundle;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
@@ -76,6 +77,54 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
 
     public static Set<String> supportedTypes() { return TYPES; }
 
+    public Bundle saveViewState() {
+        checkOpen();
+        return root == null ? new Bundle() : saveViewState(root);
+    }
+
+    private Bundle saveViewState(Handle h) {
+        Bundle state = new Bundle();
+        state.putString("type", h.node.type());
+        state.putInt("scrollX", h.widget.getScrollX()); state.putInt("scrollY", h.widget.getScrollY());
+        state.putBoolean("focused", h.widget.isFocused());
+        if (h.widget instanceof EditText edit) {
+            state.putInt("selectionStart", edit.getSelectionStart()); state.putInt("selectionEnd", edit.getSelectionEnd());
+        }
+        Bundle children = new Bundle();
+        for (int i = 0; i < h.children.size(); i++) {
+            Handle child = h.children.get(i);
+            children.putBundle(child.node.key() == null ? "index:" + i : "key:" + child.node.key(), saveViewState(child));
+        }
+        state.putBundle("children", children);
+        return state;
+    }
+
+    public void restoreViewState(Bundle state) {
+        checkOpen();
+        if (root != null) restoreViewState(root, Objects.requireNonNull(state, "state"));
+    }
+
+    private void restoreViewState(Handle h, Bundle state) {
+        if (!h.node.type().equals(state.getString("type"))) return;
+        h.restore = () -> {
+            if (h.disposed) return;
+            h.widget.scrollTo(state.getInt("scrollX"), state.getInt("scrollY"));
+            if (state.getBoolean("focused")) h.widget.requestFocus();
+            if (h.widget instanceof EditText edit) {
+                int start = Math.max(0, Math.min(edit.length(), state.getInt("selectionStart")));
+                int end = Math.max(0, Math.min(edit.length(), state.getInt("selectionEnd")));
+                edit.setSelection(start, end);
+            }
+        };
+        h.view.post(h.restore);
+        Bundle children = state.getBundle("children");
+        if (children != null) for (int i = 0; i < h.children.size(); i++) {
+            Handle child = h.children.get(i);
+            Bundle saved = children.getBundle(child.node.key() == null ? "index:" + i : "key:" + child.node.key());
+            if (saved != null) restoreViewState(child, saved);
+        }
+    }
+
     @Override public Handle create(ViewNode node) {
         checkOpen(); validate(node);
         Handle h = new Handle(node, new BoundedLayout(context));
@@ -93,14 +142,18 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
     @Override public void update(Handle h, ViewNode previous, ViewNode next) {
         checkOpen(); validate(next);
         h.node = next;
-        if (!shape(previous).equals(shape(next))) {
+        boolean rebuilt = !shape(previous).equals(shape(next));
+        if (rebuilt) {
+            cancelImage(h);
+            if (h.adapter != null) { h.adapter.close(); h.adapter = null; }
+            dismissDialog(h);
             List<Handle> retained = h.children;
             if (h.target != null) for (Handle child : retained) h.target.removeView(child.view);
             h.view.removeAllViews();
             buildWidget(h);
             setChildren(h, retained);
         }
-        bind(h, previous);
+        bind(h, rebuilt ? null : previous);
         if (!previous.props().equals(next.props())) {
             layoutChildren(h);
             if (h.parent != null) layoutChildren(h.parent);
@@ -348,7 +401,7 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
         h.action.setOnClickListener(v -> {
             if (type.equals("code-block") && h.enabled()) {
                 ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
-                clipboard.setPrimaryClip(ClipData.newPlainText("Code", h.node.props().getOrDefault("value", "")));
+                clipboard.setPrimaryClip(ClipData.newPlainText("Code", h.node.text()));
             }
             h.dispatch(event, type.equals("accordion-item") ? !bool(h.node, "expanded", false) : null);
         });
@@ -439,6 +492,7 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
                 float weight = (float) number(n, "layout.weight", 0);
                 if (Set.of("navigation-bar", "tabs", "segmented-control", "table-row").contains(parent.node.type())) weight = 1;
                 if (parent.node.type().equals("scaffold") && "content".equals(n.props().get("name"))) weight = 1;
+                if (parent.node.type().equals("scaffold")) width = ViewGroup.LayoutParams.MATCH_PARENT;
                 boolean horizontal = linear.getOrientation() == LinearLayout.HORIZONTAL;
                 if (weight > 0) { if (horizontal) width = 0; else height = 0; }
                 String alignment = parent.node.props().getOrDefault("layout.alignment", "start");
@@ -492,6 +546,7 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
         checkThread();
         if (h.disposed) return;
         h.disposed = true;
+        if (h.restore != null) h.view.removeCallbacks(h.restore);
         cancelImage(h);
         if (h.adapter != null) h.adapter.close();
         if (h.picker != null) h.picker.dismiss();
@@ -598,7 +653,7 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
     private Button button() { Button button = new Button(context); button.setAllCaps(false); button.setMinHeight(dp(48)); return button; }
 
     private String title(ViewNode n) {
-        if (n.type().equals("code-block")) return n.props().getOrDefault("value", "");
+        if (n.type().equals("code-block")) return n.text();
         return n.props().getOrDefault("title", n.props().getOrDefault("headline", n.props().getOrDefault("label", n.props().getOrDefault("message", ""))));
     }
 
@@ -706,6 +761,7 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
         private AutoCloseable imageRequest;
         private Exception imageError;
         private long imageGeneration;
+        private Runnable restore;
         private Handle(ViewNode node, BoundedLayout view) { this.node = node; this.view = view; }
         public View view() { checkThread(); return view; }
         public View widget() { checkThread(); return widget; }

@@ -8,10 +8,17 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.FrameLayout;
 
+import dev.vela.android.AndroidFrameScheduler;
+import dev.vela.android.AndroidState;
+import dev.vela.android.VelaAndroidBackend;
+import dev.vela.core.VelaRuntime;
+
 public final class MainActivity extends Activity {
     private FrameLayout host;
     private DaymarkScreen screen;
-    private boolean renderScheduled;
+    private AndroidFrameScheduler scheduler;
+    private VelaAndroidBackend backend;
+    private VelaRuntime<VelaAndroidBackend.Handle> runtime;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -28,28 +35,36 @@ public final class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
 
-        screen = new DaymarkScreen(this::scheduleRender);
-        renderNow();
-    }
-
-    private void scheduleRender() {
-        if (renderScheduled) {
-            return;
+        screen = new DaymarkScreen();
+        if (savedInstanceState != null && savedInstanceState.getBundle("vela.state") != null) {
+            screen.restoreState(AndroidState.decode(savedInstanceState.getBundle("vela.state")));
         }
-        renderScheduled = true;
-        host.post(() -> {
-            renderScheduled = false;
-            if (screen.consumeDirty()) {
-                renderNow();
-            }
-        });
+        scheduler = new AndroidFrameScheduler();
+        backend = new VelaAndroidBackend(this, host);
+        runtime = new VelaRuntime<>(screen, backend, scheduler);
+        runtime.mount();
+        if (savedInstanceState != null && savedInstanceState.getBundle("vela.views") != null) {
+            backend.restoreViewState(savedInstanceState.getBundle("vela.views"));
+        }
     }
 
-    private void renderNow() {
-        View rendered = new VelaAndroidRenderer(this).render(screen.render());
-        host.removeAllViews();
-        host.addView(rendered, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT));
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        outState.putBundle("vela.state", AndroidState.encode(screen.saveState()));
+        outState.putBundle("vela.views", backend.saveViewState());
+        super.onSaveInstanceState(outState);
+    }
+
+    @Override
+    protected void onDestroy() {
+        try {
+            if (runtime != null) runtime.close();
+        } finally {
+            try { if (backend != null) backend.close(); }
+            finally {
+                if (scheduler != null) scheduler.close();
+                super.onDestroy();
+            }
+        }
     }
 }
