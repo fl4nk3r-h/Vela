@@ -14,4 +14,12 @@ rootProject.name = 'Vela'
 include('app')
 include('vela-core')
 include('vela-compiler')
-include('showcase-android')
+// JVM verification must work without resolving Android plugins or locating an SDK.
+def sdkPath = providers.environmentVariable('ANDROID_HOME')
+        .orElse(providers.environmentVariable('ANDROID_SDK_ROOT')).orElse('').get()
+def hasSdk = !sdkPath.isBlank() && file(sdkPath).isDirectory()
+def androidEnabled = providers.gradleProperty('android').map { it.toBoolean() }.orElse(hasSdk).get()
+if (androidEnabled) {
+    include('vela-android')
+    include('showcase-android')
+}

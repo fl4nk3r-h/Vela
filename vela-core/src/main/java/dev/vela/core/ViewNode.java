@@ -17,6 +17,7 @@ public final class ViewNode {
     private final Map<String, String> props;
     private final List<ViewNode> children;
     private final Map<String, UiEventHandler> eventHandlers;
+    private final LazyContent lazyContent;
 
     private ViewNode(
             String type,
@@ -24,13 +25,16 @@ public final class ViewNode {
             String text,
             Map<String, String> props,
             List<ViewNode> children,
-            Map<String, UiEventHandler> eventHandlers) {
+            Map<String, UiEventHandler> eventHandlers,
+            LazyContent lazyContent) {
         this.type = Objects.requireNonNull(type, "type");
         this.key = key;
         this.text = text;
         this.props = Collections.unmodifiableMap(new LinkedHashMap<>(props));
         this.children = Collections.unmodifiableList(new ArrayList<>(children));
         this.eventHandlers = Collections.unmodifiableMap(new LinkedHashMap<>(eventHandlers));
+        this.lazyContent = lazyContent;
+        StandardProps.validate(this.props);
     }
 
     public static ViewNode text(String value) {
@@ -68,7 +72,7 @@ public final class ViewNode {
                 text,
                 props,
                 children,
-                eventHandlers);
+                eventHandlers, lazyContent);
     }
 
     public String text() {
@@ -83,6 +87,16 @@ public final class ViewNode {
         return children;
     }
 
+    ViewNode withChildren(List<ViewNode> children) {
+        return new ViewNode(type, key, text, props, children, eventHandlers, lazyContent);
+    }
+
+    public LazyContent lazyContent() { return lazyContent; }
+
+    public <T> T property(PropKey<T> key, T fallback) {
+        return Objects.requireNonNull(key, "key").read(props, fallback);
+    }
+
     public Set<String> eventNames() {
         return eventHandlers.keySet();
     }
@@ -93,6 +107,10 @@ public final class ViewNode {
 
     public boolean dispatch(String eventName, Object value) {
         Objects.requireNonNull(eventName, "eventName");
+        if ("false".equalsIgnoreCase(props.get("state.enabled"))
+                || "false".equalsIgnoreCase(props.get("enabled"))) {
+            return false;
+        }
         UiEventHandler handler = eventHandlers.get(eventName);
         if (handler == null) {
             return false;
@@ -108,6 +126,7 @@ public final class ViewNode {
         private final Map<String, UiEventHandler> eventHandlers = new LinkedHashMap<>();
         private String key;
         private String text;
+        private LazyContent lazyContent;
 
         private Builder(String type) {
             this.type = requireText(type, "type");
@@ -128,6 +147,15 @@ public final class ViewNode {
             return this;
         }
 
+        public <T> Builder prop(PropKey<T> key, T value) {
+            return prop(key.name(), key.encode().apply(Objects.requireNonNull(value, "value")));
+        }
+
+        public Builder lazyContent(LazyContent content) {
+            lazyContent = Objects.requireNonNull(content, "content");
+            return this;
+        }
+
         public Builder props(Map<String, String> props) {
             Objects.requireNonNull(props, "props").forEach(this::prop);
             return this;
@@ -136,6 +164,11 @@ public final class ViewNode {
         public Builder modifier(Modifier modifier) {
             props.putAll(Objects.requireNonNull(modifier, "modifier").properties());
             return this;
+        }
+
+        /** Marks this node's text and property values as sensitive in diagnostic output. */
+        public Builder sensitive() {
+            return prop("semantics.sensitive", true);
         }
 
         public Builder child(ViewNode child) {
@@ -154,7 +187,10 @@ public final class ViewNode {
         }
 
         public ViewNode build() {
-            return new ViewNode(type, key, text, props, children, eventHandlers);
+            if (lazyContent != null && !children.isEmpty()) {
+                throw new IllegalArgumentException("Lazy nodes cannot also have eager children");
+            }
+            return new ViewNode(type, key, text, props, children, eventHandlers, lazyContent);
         }
 
         private static String requireText(String value, String name) {

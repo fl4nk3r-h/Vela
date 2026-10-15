@@ -21,6 +21,6 @@ android {
 }
 
 dependencies {
-    implementation project(':vela-core')
+    implementation project(':vela-android')
     annotationProcessor project(':vela-compiler')
 }

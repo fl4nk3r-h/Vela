@@ -4,6 +4,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Locale;
 
 public final class Modifier {
     private static final Modifier NONE = new Modifier(Map.of());
@@ -188,6 +189,6 @@ public final class Modifier {
     }
 
     private static String enumValue(Enum<?> value) {
-        return Objects.requireNonNull(value, "value").name().toLowerCase().replace('_', '-');
+        return Objects.requireNonNull(value, "value").name().toLowerCase(Locale.ROOT).replace('_', '-');
     }
 }

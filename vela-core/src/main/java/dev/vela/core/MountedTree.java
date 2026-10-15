@@ -7,12 +7,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.WeakHashMap;
 
 public final class MountedTree<H> implements AutoCloseable {
     private final RendererBackend<H> backend;
     private final Thread owner = Thread.currentThread();
     private MountedNode<H> root;
     private boolean closed;
+    private final Map<ViewNode, Boolean> validated = new WeakHashMap<>();
 
     public MountedTree(RendererBackend<H> backend) {
         this.backend = Objects.requireNonNull(backend, "backend");
@@ -70,6 +72,9 @@ public final class MountedTree<H> implements AutoCloseable {
     }
 
     private void patch(MountedNode<H> mounted, ViewNode next) {
+        if (mounted.node == next) {
+            return;
+        }
         // Always update the description so a retained view receives current callbacks.
         backend.update(mounted.handle, mounted.node, next);
         List<MountedNode<H>> previous = mounted.children;
@@ -114,11 +119,17 @@ public final class MountedTree<H> implements AutoCloseable {
         }
         mounted.node = next;
         mounted.children = children;
+        Throwable cleanupFailure = null;
         for (MountedNode<H> child : previous) {
             if (!retained.contains(child)) {
-                dispose(child);
+                try {
+                    dispose(child);
+                } catch (RuntimeException | Error failure) {
+                    cleanupFailure = accumulate(cleanupFailure, failure);
+                }
             }
         }
+        rethrow(cleanupFailure);
     }
 
     private boolean reusable(MountedNode<H> mounted, ViewNode node) {
@@ -146,6 +157,7 @@ public final class MountedTree<H> implements AutoCloseable {
     }
 
     private void validateKeys(ViewNode node) {
+        if (validated.containsKey(node)) return;
         Set<String> keys = new HashSet<>();
         for (ViewNode child : node.children()) {
             if (child.key() != null && !keys.add(child.key())) {
@@ -153,6 +165,7 @@ public final class MountedTree<H> implements AutoCloseable {
             }
             validateKeys(child);
         }
+        validated.put(node, Boolean.TRUE);
     }
 
     private void dispose(MountedNode<H> node) {

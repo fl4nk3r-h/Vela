@@ -1,5 +1,8 @@
 package dev.vela.core;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 public final class VelaRenderer {
     public String render(ViewNode node) {
         StringBuilder builder = new StringBuilder();
@@ -8,6 +11,8 @@ public final class VelaRenderer {
     }
 
     private void render(ViewNode node, StringBuilder builder, int depth) {
+        boolean sensitive = "password".equals(node.props().get("inputType"))
+                || Boolean.parseBoolean(node.props().get("semantics.sensitive"));
         builder.append("  ".repeat(Math.max(0, depth)))
             .append(node.type());
 
@@ -16,11 +21,18 @@ public final class VelaRenderer {
         }
 
         if (node.text() != null) {
-            builder.append("[").append(node.text()).append("]");
+            builder.append("[").append(sensitive ? "<redacted>" : node.text()).append("]");
         }
 
         if (!node.props().isEmpty()) {
-            builder.append(" ").append(node.props());
+            Map<String, String> diagnosticProps = node.props();
+            if (sensitive) {
+                diagnosticProps = new LinkedHashMap<>();
+                for (String name : node.props().keySet()) {
+                    diagnosticProps.put(name, "<redacted>");
+                }
+            }
+            builder.append(" ").append(diagnosticProps);
         }
 
         if (!node.eventNames().isEmpty()) {
