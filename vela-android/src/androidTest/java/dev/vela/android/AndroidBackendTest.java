@@ -31,7 +31,8 @@ public final class AndroidBackendTest extends InstrumentationTestCase {
 
     @Override protected void setUp() throws Exception {
         super.setUp();
-        Intent intent = new Intent(getInstrumentation().getTargetContext(), TestActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        Intent intent = new Intent(getInstrumentation().getTargetContext(), TestActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         activity = (TestActivity) getInstrumentation().startActivitySync(intent);
         ui(() -> {
             host = new FrameLayout(activity); activity.setContentView(host);
@@ -41,7 +42,10 @@ public final class AndroidBackendTest extends InstrumentationTestCase {
     }
 
     @Override protected void tearDown() throws Exception {
-        try { ui(() -> { tree.close(); backend.close(); activity.finish(); }); }
+        try { ui(() -> {
+            try { tree.close(); }
+            finally { try { backend.close(); } finally { activity.finish(); } }
+        }); }
         finally { super.tearDown(); }
     }
 
@@ -128,6 +132,7 @@ public final class AndroidBackendTest extends InstrumentationTestCase {
     }
 
     public void testRealEditorsSelectorsAndModalDismissal() throws Exception {
+        AtomicInteger dismissals = new AtomicInteger();
         ui(() -> {
             AtomicInteger submits = new AtomicInteger();
             tree.render(VelaForm.of("Account", submits::incrementAndGet, Modifier.none(), field("", ignored -> { })));
@@ -135,12 +140,39 @@ public final class AndroidBackendTest extends InstrumentationTestCase {
             edit.onEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_DONE); assertEquals(1, submits.get());
             tree.render(VelaSelect.of("Mode", "b", List.of("a", "b"), ignored -> { }, Modifier.none()));
             Spinner select = (Spinner) tree.root().widget(); assertEquals("b", select.getSelectedItem());
-            tree.render(VelaDatePicker.of("Date", LocalDate.of(2026, 1, 1), null, null, ignored -> { }, Modifier.none()));
+            AtomicReference<LocalDate> selectedDate = new AtomicReference<>();
+            tree.render(VelaDatePicker.of("Date", LocalDate.of(2026, 1, 1), null, null, selectedDate::set, Modifier.none()));
             assertTrue(tree.root().widget() instanceof Button);
-            AtomicInteger dismissals = new AtomicInteger();
+            tree.root().widget().performClick();
+            assertTrue(tree.root().datePicker().isShowing());
+            tree.root().datePicker().getDatePicker().updateDate(2026, 1, 3);
+            tree.root().datePicker().getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick();
+            assertEquals(LocalDate.of(2026, 2, 3), selectedDate.get());
             tree.render(VelaDialog.of("Confirm", VelaText.of("Content"), null, dismissals::incrementAndGet, Modifier.none()));
             assertTrue(tree.root().dialog().isShowing()); tree.root().dialog().dismiss();
         });
+        getInstrumentation().waitForIdleSync();
+        assertEquals(1, dismissals.get());
+    }
+
+    public void testDefaultImageLoaderLoadsResourceAndSchedulerCancelsFrames() throws Exception {
+        var loaded = new java.util.concurrent.CountDownLatch(1);
+        AtomicReference<android.graphics.drawable.Drawable> drawable = new AtomicReference<>();
+        AtomicReference<Exception> failure = new AtomicReference<>();
+        try (AndroidImageLoader loader = new AndroidImageLoader(activity)) {
+            loader.load("@drawable/test_image", result -> { drawable.set(result); loaded.countDown(); },
+                    error -> { failure.set(error); loaded.countDown(); });
+            assertTrue(loaded.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            assertNull(failure.get()); assertNotNull(drawable.get());
+        }
+        AtomicInteger callbacks = new AtomicInteger();
+        var sentinel = new java.util.concurrent.CountDownLatch(1);
+        ui(() -> {
+            AndroidFrameScheduler scheduler = new AndroidFrameScheduler();
+            scheduler.schedule(callbacks::incrementAndGet); scheduler.close();
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(sentinel::countDown, 80);
+        });
+        assertTrue(sentinel.await(5, java.util.concurrent.TimeUnit.SECONDS)); assertEquals(0, callbacks.get());
     }
 
     public void testImagesUseSourcesRespectScaleAndCancelStaleLoads() throws Exception {

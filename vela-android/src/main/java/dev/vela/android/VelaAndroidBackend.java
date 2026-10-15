@@ -87,6 +87,10 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
         state.putString("type", h.node.type());
         state.putInt("scrollX", h.widget.getScrollX()); state.putInt("scrollY", h.widget.getScrollY());
         state.putBoolean("focused", h.widget.isFocused());
+        if (h.widget instanceof AbsListView list) {
+            state.putInt("firstVisible", list.getFirstVisiblePosition());
+            state.putInt("firstOffset", list.getChildCount() == 0 ? 0 : list.getChildAt(0).getTop());
+        }
         if (h.widget instanceof EditText edit) {
             state.putInt("selectionStart", edit.getSelectionStart()); state.putInt("selectionEnd", edit.getSelectionEnd());
         }
@@ -109,6 +113,8 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
         h.restore = () -> {
             if (h.disposed) return;
             h.widget.scrollTo(state.getInt("scrollX"), state.getInt("scrollY"));
+            if (h.widget instanceof ListView list) list.setSelectionFromTop(state.getInt("firstVisible"), state.getInt("firstOffset"));
+            else if (h.widget instanceof GridView grid) grid.setSelection(state.getInt("firstVisible"));
             if (state.getBoolean("focused")) h.widget.requestFocus();
             if (h.widget instanceof EditText edit) {
                 int start = Math.max(0, Math.min(edit.length(), state.getInt("selectionStart")));
@@ -134,7 +140,8 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
             bind(h, null);
             return h;
         } catch (RuntimeException | Error failure) {
-            dispose(h);
+            try { dispose(h); }
+            catch (RuntimeException | Error cleanupFailure) { failure.addSuppressed(cleanupFailure); }
             throw failure;
         }
     }
@@ -421,7 +428,7 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
             });
             return;
         }
-        if (h.widget instanceof CompoundButton || h.widget instanceof EditText || h.widget instanceof Spinner
+        if (h.widget instanceof CompoundButton || h.widget instanceof EditText || h.widget instanceof AdapterView
                 || h.node.type().equals("date-picker")) return;
         String event = null;
         for (String candidate : List.of("click", "select", "open", "navigate")) {
@@ -568,16 +575,26 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
         h.disposed = true;
         if (h.restore != null) h.view.removeCallbacks(h.restore);
         cancelImage(h);
-        if (h.adapter != null) h.adapter.close();
-        if (h.picker != null) h.picker.dismiss();
-        dismissDialog(h);
-        clearListeners(h.widget);
-        h.node = null; h.children = List.of(); h.parent = null;
-        h.view.removeAllViews(); live.remove(h);
+        Throwable failure = null;
+        try { if (h.adapter != null) h.adapter.close(); }
+        catch (RuntimeException | Error error) { failure = error; }
+        try {
+            if (h.picker != null) h.picker.dismiss();
+            dismissDialog(h);
+            clearListeners(h.widget);
+        } catch (RuntimeException | Error error) {
+            if (failure == null) failure = error; else failure.addSuppressed(error);
+        } finally {
+            h.node = null; h.children = List.of(); h.parent = null;
+            h.view.removeAllViews(); live.remove(h);
+        }
+        if (failure instanceof RuntimeException error) throw error;
+        if (failure instanceof Error error) throw error;
     }
 
     private void clearListeners(View view) {
-        view.setOnClickListener(null);
+        if (!(view instanceof AdapterView)) view.setOnClickListener(null);
+        if (view instanceof AbsListView list) list.setOnItemClickListener(null);
         view.setAccessibilityDelegate(null);
         if (view instanceof CompoundButton button) button.setOnCheckedChangeListener(null);
         if (view instanceof SeekBar bar) bar.setOnSeekBarChangeListener(null);
@@ -800,6 +817,7 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
         public View widget() { checkThread(); return widget; }
         public List<Handle> children() { checkThread(); return children; }
         public Dialog dialog() { checkThread(); return dialog; }
+        public DatePickerDialog datePicker() { checkThread(); return picker; }
         public Exception imageError() { checkThread(); return imageError; }
         private boolean enabled() { return !disposed && node != null && bool(node, "state.enabled", true)
                 && bool(node, "enabled", true) && (parent == null || parent.enabled()); }

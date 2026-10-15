@@ -15,7 +15,7 @@ public abstract class VelaComponent {
     private final Map<String, VelaComponent> children = new LinkedHashMap<>();
     private final Map<String, SavedValue<?>> saveable = new LinkedHashMap<>();
     private final List<AutoCloseable> resources = new ArrayList<>();
-    private Map<String, StateSnapshot> restoredChildren = Map.of();
+    private Map<String, StateSnapshot> restoredChildren = new LinkedHashMap<>();
     private Set<String> renderingChildren;
     private ViewNode cached;
 
@@ -51,7 +51,7 @@ public abstract class VelaComponent {
             // Attach first: a component already owned elsewhere must not be torn down here.
             component.attachRuntime(this::notifyStateChanged, runtimeThread);
             children.put(key, component);
-            StateSnapshot restored = restoredChildren.get(key);
+            StateSnapshot restored = restoredChildren.remove(key);
             if (restored != null) component.restoreState(restored);
             component.onMount();
         }
@@ -82,9 +82,9 @@ public abstract class VelaComponent {
             SavedValue<?> entry = saveable.get(key);
             if (entry != null) entry.restore(value);
         });
-        restoredChildren = snapshot.children();
+        restoredChildren = new LinkedHashMap<>(snapshot.children());
         children.forEach((key, value) -> {
-            StateSnapshot saved = restoredChildren.get(key);
+            StateSnapshot saved = restoredChildren.remove(key);
             if (saved != null) value.restoreState(saved);
         });
         markDirty();

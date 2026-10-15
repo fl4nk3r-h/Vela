@@ -62,11 +62,16 @@ public final class VelaRuntime<H> implements AutoCloseable {
     /** Marshal a result to the owner thread. The scheduler must accept calls from this thread. */
     public void dispatch(Runnable action) {
         Objects.requireNonNull(action, "action");
+        if (closed) return;
         if (!mounted) throw new IllegalStateException("Runtime is not mounted");
-        scheduler.schedule(() -> {
-            checkThread();
-            if (mounted && !closed) action.run();
-        });
+        try {
+            scheduler.schedule(() -> {
+                checkThread();
+                if (mounted && !closed) action.run();
+            });
+        } catch (IllegalStateException failure) {
+            if (!closed) throw failure;
+        }
     }
 
     public void flush() {
