@@ -260,7 +260,7 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
     private void installListeners(Handle h) {
         if (h.widget instanceof CompoundButton control) {
             control.setOnCheckedChangeListener((button, checked) -> {
-                if (!h.applying) {
+                if (!h.applying && !h.disposed && h.node != null) {
                     if (h.node.type().equals("radio-button")) { if (checked) h.dispatch("select", null); }
                     else h.dispatch("change", checked);
                 }
@@ -268,7 +268,7 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
         } else if (h.widget instanceof SeekBar bar) {
             bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override public void onProgressChanged(SeekBar view, int progress, boolean fromUser) {
-                    if (fromUser && !h.applying) h.dispatch("change", range(h.node).valueAt(progress));
+                    if (fromUser && !h.applying && h.node != null) h.dispatch("change", range(h.node).valueAt(progress));
                 }
                 @Override public void onStartTrackingTouch(SeekBar view) { }
                 @Override public void onStopTrackingTouch(SeekBar view) { }
@@ -405,6 +405,7 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
             default -> bool(h.node, "expanded", false) ? "Collapse" : "Expand";
         });
         h.action.setOnClickListener(v -> {
+            if (!h.enabled()) return;
             if (type.equals("code-block") && h.enabled()) {
                 ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
                 clipboard.setPrimaryClip(ClipData.newPlainText("Code", h.node.text()));
@@ -570,8 +571,19 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
         if (h.adapter != null) h.adapter.close();
         if (h.picker != null) h.picker.dismiss();
         dismissDialog(h);
+        clearListeners(h.widget);
         h.node = null; h.children = List.of(); h.parent = null;
         h.view.removeAllViews(); live.remove(h);
+    }
+
+    private void clearListeners(View view) {
+        view.setOnClickListener(null);
+        view.setAccessibilityDelegate(null);
+        if (view instanceof CompoundButton button) button.setOnCheckedChangeListener(null);
+        if (view instanceof SeekBar bar) bar.setOnSeekBarChangeListener(null);
+        if (view instanceof Spinner spinner) spinner.setOnItemSelectedListener(null);
+        if (view instanceof EditText edit) edit.setOnEditorActionListener(null);
+        if (view instanceof ViewGroup group) for (int i = 0; i < group.getChildCount(); i++) clearListeners(group.getChildAt(i));
     }
 
     @Override public void close() {
