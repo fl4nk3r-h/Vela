@@ -8,6 +8,8 @@ import android.widget.LinearLayout;
 final class ArrangedLayout extends LinearLayout {
     String arrangement = "start";
 
+    ArrangedLayout(Context context) { this(context, VERTICAL); }
+
     ArrangedLayout(Context context, int orientation) { super(context); setOrientation(orientation); }
 
     @Override protected void onLayout(boolean changed, int left, int top, int right, int bottom) {

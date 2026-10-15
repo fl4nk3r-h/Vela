@@ -4,7 +4,9 @@
 [versions]
 guava = "33.4.6-jre"
 junit-jupiter = "5.12.1"
+desugar-jdk = "2.1.5"
 
 [libraries]
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit-jupiter" }
+desugar-jdk = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugar-jdk" }

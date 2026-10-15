@@ -36,7 +36,7 @@ public abstract class VelaComponent {
     protected final ViewNode child(String key, VelaComponent component) {
         requireKey(key);
         Objects.requireNonNull(component, "component");
-        if (renderingChildren == null) {
+        if (renderingChildren == null || runtimeInvalidation == null) {
             throw new IllegalStateException("child() requires a VelaRuntime render pass");
         }
         if (component == this || !renderingChildren.add(key)) {

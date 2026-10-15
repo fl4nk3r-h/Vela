@@ -515,13 +515,15 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
                 if (parent.node.type().equals("scaffold")) width = ViewGroup.LayoutParams.MATCH_PARENT;
                 boolean horizontal = linear.getOrientation() == LinearLayout.HORIZONTAL;
                 if (weight > 0) { if (horizontal) width = 0; else height = 0; }
-                String alignment = parent.node.props().getOrDefault("layout.alignment", "start");
-                if (alignment.equals("stretch")) { if (horizontal) height = ViewGroup.LayoutParams.MATCH_PARENT; else width = ViewGroup.LayoutParams.MATCH_PARENT; }
+                String alignment = n.props().getOrDefault("layout.alignSelf", parent.node.props().getOrDefault("layout.alignment", "start"));
+                if (alignment.equals("stretch")) {
+                    if (horizontal && !n.props().containsKey("style.height")) height = ViewGroup.LayoutParams.MATCH_PARENT;
+                    else if (!horizontal && !n.props().containsKey("style.width")) width = ViewGroup.LayoutParams.MATCH_PARENT;
+                }
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(width, height, weight);
                 String self = n.props().get("layout.alignSelf");
                 if (self != null) {
-                    if (self.equals("stretch")) { if (horizontal) lp.height = ViewGroup.LayoutParams.MATCH_PARENT; else lp.width = ViewGroup.LayoutParams.MATCH_PARENT; }
-                    else lp.gravity = horizontal ? verticalGravity(self) : horizontalGravity(self);
+                    if (!self.equals("stretch")) lp.gravity = horizontal ? verticalGravity(self) : horizontalGravity(self);
                 }
                 params = lp;
             } else if (parent.target instanceof GridLayout) {

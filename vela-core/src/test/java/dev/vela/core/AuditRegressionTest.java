@@ -94,9 +94,11 @@ class AuditRegressionTest {
         ViewNode password = VelaTextField.of("Password", "audit-secret", "", VelaTextField.InputType.PASSWORD,
                 true, ignored -> { }, Modifier.none());
         ViewNode custom = ViewNode.builder("text").text("custom-secret").prop("value", "custom-secret").sensitive().build();
-        ViewNode root = ViewNode.column(List.of(password, custom));
+        ViewNode subtree = ViewNode.builder("column").sensitive().child(ViewNode.text("nested-secret")).build();
+        ViewNode root = ViewNode.column(List.of(password, custom, subtree));
         assertFalse(new VelaRenderer().render(root).contains("audit-secret"));
         assertFalse(new VelaRenderer().render(root).contains("custom-secret"));
+        assertFalse(new VelaRenderer().render(root).contains("nested-secret"));
         TextRendererBackend backend = new TextRendererBackend();
         try (MountedTree<TextRendererBackend.Node> tree = new MountedTree<>(backend)) {
             tree.render(root);
@@ -180,6 +182,7 @@ class AuditRegressionTest {
         AtomicInteger late = new AtomicInteger();
         runtime.dispatch(late::incrementAndGet);
         runtime.close();
+        runtime.dispatch(late::incrementAndGet);
         callbacks.forEach(Runnable::run);
         assertEquals(0, late.get());
     }
