@@ -20,7 +20,7 @@ This page records the implementation and regression coverage for the 2026-10-15 
 | F03: No stateful child scopes | `child(key, stableInstance)` owns state invalidation, lifecycle, and cached child descriptions | Child changes update output without rendering parent/sibling; mount/removal/disposal tests |
 | F04: Removed sibling leak | Reconciliation attempts every removed sibling and aggregates failures | First removed sibling throws; all siblings and root still disposed |
 | F05: Missing restoration/cancellation | Saveable codecs/snapshots, keyed child restoration, `onDispose`, runtime dispatch, Bundle/native view restoration, scheduler cancellation | Snapshot round trip, remount, cleanup failure, late-result rejection, native selection, and Activity recreation |
-| F06: Weak props/modifier contract | Typed `PropKey`/`StandardProps`, shared validation, strict Android diagnostics, max bounds/aspect/alignment/spacing/border/focus/z-index support | Invalid raw props rejected; native measurement, border, distributed spacing, and aspect ratio tests |
+| F06: Weak props/modifier contract | Typed `PropKey`/`StandardProps`, shared validation, strict Android diagnostics, max bounds/aspect/alignment/spacing/border/focus/z-index support | Invalid raw props rejected; native measurement, border, distributed spacing, aspect ratio, root parameter preservation, and lazy row resize tests |
 | F07: Full-root work/eager collections | Cached child descriptions, identity-based patch/key-validation skipping, native visual update skipping, lazy list/grid factories and recycling | Unchanged subtree operation counts; independent child rendering; 10,000-item native list creates a bounded visible set |
 | F08: Touch-only checked events | Native checked listeners use programmatic-update guards instead of pressed state | Accessibility click and native switch activation update application callbacks |
 | F09: Inconsistent disabled inputs | Central local event guard; native inherited enabled state and callback suppression | Disabled select/slider/multiline/segments; disabled native segments and ancestors |
@@ -46,10 +46,21 @@ Commands used for final verification:
 ./gradlew test :app:run --offline --no-daemon --no-configuration-cache
 ./gradlew -Pandroid=true :vela-android:connectedDebugAndroidTest :showcase-android:connectedDebugAndroidTest --offline --no-daemon --no-configuration-cache
 ./gradlew -Pandroid=true :vela-android:lintDebug :showcase-android:lintDebug :showcase-android:assembleDebug --offline --no-daemon --no-configuration-cache
-ANDROID_HOME=/tmp/vela-missing-sdk ANDROID_SDK_ROOT=/tmp/vela-missing-sdk ./gradlew test --offline --no-daemon --no-configuration-cache
+ANDROID_HOME=/tmp/vela-missing-sdk ANDROID_SDK_ROOT=/tmp/vela-missing-sdk ./gradlew test --offline --no-daemon
 ```
 
-Results are recorded after final execution. Test reports are generated under each module's `build/reports`; native XML results are under `build/outputs/androidTest-results/connected`.
+Local results on 2026-10-15:
+
+| Check | Result |
+| --- | --- |
+| JVM tests | 43 passed, 0 failures/errors/skipped |
+| Native backend tests on API 36 | 15 passed, 0 failures/errors/skipped |
+| Daymark Activity recreation on API 36 | 1 passed, 0 failures/errors/skipped |
+| Android lint | 0 errors; 1 backend warning and 2 showcase warnings about SDK versions |
+| Debug APK | Built successfully |
+| SDK-free default test command | Passed with normal configuration cache enabled |
+
+Test reports are generated under each module's `build/reports`; native XML results are under `build/outputs/androidTest-results/connected`. Lint's SDK-version notices remain visible; compile/target SDK changes need their own compatibility work. Native conformance and Activity recreation tests were run on the available API 36 emulator, not a physical device.
 
 ## Related Pages
 

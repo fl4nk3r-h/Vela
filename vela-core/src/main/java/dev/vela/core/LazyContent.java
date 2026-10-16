@@ -19,7 +19,8 @@ public record LazyContent(int count, IntFunction<String> key, IntFunction<ViewNo
     }
 
     public ViewNode nodeAt(int index) {
-        return Objects.requireNonNull(item.apply(index), "item node").withKey(keyAt(index));
+        String identity = keyAt(index);
+        return Objects.requireNonNull(item.apply(index), "item node").withKey(identity);
     }
 
     private void checkIndex(int index) {

@@ -46,4 +46,6 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          script: ./gradlew -Pandroid=true :vela-android:connectedDebugAndroidTest :showcase-android:connectedDebugAndroidTest :vela-android:lintDebug :showcase-android:lintDebug :showcase-android:assembleDebug --no-daemon --no-configuration-cache
+          script: |
+            sdkmanager "platforms;android-35" "build-tools;35.0.0"
+            ./gradlew -Pandroid=true :vela-android:connectedDebugAndroidTest :showcase-android:connectedDebugAndroidTest :vela-android:lintDebug :showcase-android:lintDebug :showcase-android:assembleDebug --no-daemon --no-configuration-cache

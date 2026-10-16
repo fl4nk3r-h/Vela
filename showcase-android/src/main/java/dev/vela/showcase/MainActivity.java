@@ -31,9 +31,16 @@ public final class MainActivity extends Activity {
 
         host = new FrameLayout(this);
         host.setBackgroundColor(Color.parseColor("#F4F6F2"));
+        host.setOnApplyWindowInsetsListener((view, insets) -> {
+            // The target SDK enables edge-to-edge windows; keep controls clear of system bars.
+            view.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
+                    insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
+            return insets.consumeSystemWindowInsets();
+        });
         setContentView(host, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
+        host.requestApplyInsets();
 
         screen = new DaymarkScreen();
         if (savedInstanceState != null && savedInstanceState.getBundle("vela.state") != null) {

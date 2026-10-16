@@ -21,6 +21,12 @@ public final class DaymarkActivityTest extends InstrumentationTestCase {
         try {
             AtomicReference<View> button = new AtomicReference<>();
             ui(() -> {
+                View title = find(original.getWindow().getDecorView(), "DAYMARK");
+                assertNotNull(title);
+                int[] location = new int[2]; title.getLocationOnScreen(location);
+                if (title.getRootWindowInsets() != null) {
+                    assertTrue("App bar overlaps the status bar", location[1] >= title.getRootWindowInsets().getSystemWindowInsetTop());
+                }
                 assertNotNull(find(original.getWindow().getDecorView(), "5 / 8 glasses"));
                 button.set(find(original.getWindow().getDecorView(), "+ Glass"));
                 assertNotNull(button.get()); button.get().performClick();

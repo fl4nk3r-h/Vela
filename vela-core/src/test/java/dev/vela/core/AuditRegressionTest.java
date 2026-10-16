@@ -123,6 +123,7 @@ class AuditRegressionTest {
         assertEquals("row-7", lazy.lazyContent().nodeAt(7).key());
         assertEquals(1, created.get());
         assertThrows(IndexOutOfBoundsException.class, () -> lazy.lazyContent().nodeAt(10_000));
+        assertEquals(1, created.get());
     }
 
     @Test

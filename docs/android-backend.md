@@ -55,7 +55,7 @@ The snackbar is an application-controlled inline status/action view, not an auto
 
 ## Layout And Semantics
 
-The adapter supports every public `Modifier` property: width/height and min/max bounds, aspect ratio when one axis is constrained, padding/margin, colors, border/corner radius, elevation/opacity, weight, cross-axis alignment, z-index, visibility/enabled state, focusability, scroll wrapping, descriptions, roles, and test tags. Borders do not require a background color.
+The adapter supports every public `Modifier` property: width/height and min/max bounds, aspect ratio when one axis is constrained, padding/margin, widget colors, border/corner radius, elevation/opacity, weight, cross-axis alignment, z-index, visibility/enabled state, focusability, scroll wrapping, descriptions, roles, and test tags. Foreground colors apply to text and progress/slider tints. Borders do not require a background color.
 
 `SPACE_BETWEEN`, `SPACE_AROUND`, and `SPACE_EVENLY` distribute remaining space. `STRETCH` supplies cross-axis fill. Explicit width and height take priority when both axes are constrained; max bounds restrict measurement. `alignSelf` overrides parent alignment. Test tags identify the modifier boundary, while accessibility descriptions and roles apply to the native widget.
 
@@ -71,7 +71,7 @@ Register subscriptions or asynchronous cancellation with `onDispose(...)` in a c
 
 ## Image Loading
 
-The default loader supports `@drawable/name`, relative asset names, `android.resource://`, `content://`, `file://`, and HTTPS. The application must declare network permission if it uses HTTPS; the library does not add it. HTTP redirects are rejected. Requests have connection/read timeouts, a 10 MiB input limit, and sampled bitmap decoding.
+The default loader supports `@drawable/name`, relative asset names, `android.resource://`, `content://`, `file://`, and HTTPS. The application must declare network permission if it uses HTTPS; the library does not add it. HTTP redirects are rejected. Requests have connection/read timeouts, a 10 MiB input limit, and sampled bitmap decoding. When resource shrinking is enabled, keep resources referenced only through dynamic `@drawable/name` strings or inject a loader using compiled resource identifiers.
 
 Pass an `ImageLoader` to the backend constructor to integrate an application image cache or other URI schemes. It returns a cancellation handle and delivers completion on the UI thread. The backend cancels changed/removed images and ignores stale completions. `Handle.imageError()` exposes load errors without logging source URLs or image values. A caller-supplied loader remains owned by the caller.
 

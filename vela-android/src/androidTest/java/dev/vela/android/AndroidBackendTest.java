@@ -123,10 +123,10 @@ public final class AndroidBackendTest extends InstrumentationTestCase {
                 assertEquals(5, bar.getMax());
                 bar.onKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT));
                 assertEquals(2.0, screen.value.get(), 0.000001);
-                runtime.flush(); assertSame(bar, runtime.root().widget());
+                runtime.flush(); measure(); assertSame(bar, runtime.root().widget());
                 bar.onKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT));
                 assertEquals(4.0, screen.value.get(), 0.000001);
-                runtime.flush(); assertSame(bar, runtime.root().widget());
+                runtime.flush(); measure(); assertSame(bar, runtime.root().widget());
             }
         });
     }
@@ -196,6 +196,38 @@ public final class AndroidBackendTest extends InstrumentationTestCase {
         });
     }
 
+    public void testModalDoesNotConsumeParentLayoutAndSizesItsWindow() throws Exception {
+        ui(() -> {
+            tree.render(VelaColumn.of(
+                    VelaText.of("Before"),
+                    VelaDialog.of("Modal", VelaText.of("Body"), null, () -> { }, Modifier.none().width(150).height(100)),
+                    VelaText.of("After")));
+            measure();
+            VelaAndroidBackend.Handle modal = tree.root().children().get(1);
+            assertEquals(View.GONE, modal.view().getVisibility());
+            assertTrue(modal.dialog().isShowing());
+            assertEquals(pixels(150), modal.dialog().getWindow().getAttributes().width);
+            assertEquals(pixels(100), modal.dialog().getWindow().getAttributes().height);
+        });
+    }
+
+    public void testAccordionStaysCollapsedWhenItsContentChanges() throws Exception {
+        ui(() -> {
+            tree.render(VelaAccordion.item("Details", false, ViewNode.builder("text").text("before").build(),
+                    ignored -> { }, Modifier.none()));
+            measure();
+            assertEquals(View.GONE, tree.root().children().get(0).view().getVisibility());
+            tree.render(VelaAccordion.item("Details", false, ViewNode.builder("text").text("after").build(),
+                    ignored -> { }, Modifier.none()));
+            measure();
+            assertEquals(View.GONE, tree.root().children().get(0).view().getVisibility());
+            tree.render(VelaAccordion.item("Details", true, ViewNode.builder("text").text("after").build(),
+                    ignored -> { }, Modifier.none()));
+            measure();
+            assertEquals(View.VISIBLE, tree.root().children().get(0).view().getVisibility());
+        });
+    }
+
     public void testModifiersMeasureBoundsApplyBorderAndDistributeSpace() throws Exception {
         ui(() -> {
             tree.render(VelaText.of("Bounded", TextStyle.defaultStyle(), Modifier.none().width(200).maxWidth(80)
@@ -220,14 +252,18 @@ public final class AndroidBackendTest extends InstrumentationTestCase {
     public void testLazyListBuildsVisibleRowsAndRecycles() throws Exception {
         ui(() -> {
             AtomicInteger built = new AtomicInteger();
+            AtomicInteger rowHeight = new AtomicInteger(40);
             tree.render(VelaLazyList.of(10_000, i -> "item-" + i, i -> {
-                built.incrementAndGet(); return VelaText.of("Item " + i, TextStyle.defaultStyle(), Modifier.none().height(40));
+                built.incrementAndGet(); return VelaText.of("Item " + i, TextStyle.defaultStyle(), Modifier.none().height(rowHeight.get()));
             }, Modifier.none().fillMaxWidth().height(200)));
             assertEquals(0, built.get()); measure();
             ListView list = (ListView) tree.root().widget();
             assertTrue(built.get() > 0); assertTrue(built.get() < 100);
             View row = list.getAdapter().getView(123, null, list);
             assertSame(row, list.getAdapter().getView(124, row, list));
+            rowHeight.set(80);
+            assertSame(row, list.getAdapter().getView(124, row, list));
+            assertEquals(pixels(80), ((ViewGroup) row).getChildAt(0).getLayoutParams().height);
             assertEquals(10_000, list.getAdapter().getCount());
         });
     }

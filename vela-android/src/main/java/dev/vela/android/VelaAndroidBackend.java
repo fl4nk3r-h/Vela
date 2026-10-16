@@ -171,12 +171,14 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
         if (!previous.props().equals(next.props())) {
             layoutChildren(h);
             if (h.parent != null) layoutChildren(h.parent);
-            else if (root == h) applyRootSize(h);
+            if (root == h) applyRootSize(h);
         }
     }
 
     private void buildWidget(Handle h) {
         h.title = null; h.detail = null; h.action = null; h.target = null;
+        h.modalView = null;
+        if (h.attachment != null) h.view.removeOnAttachStateChangeListener(h.attachment);
         String type = h.node.type();
         h.widget = switch (type) {
             case "text", "table-cell", "option", "badge", "icon", "divider", "skeleton", "spacer" -> textOrSpace(type);
@@ -209,13 +211,17 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
             displayed = scroller;
         }
         if (type.equals("dialog") || type.equals("drawer")) {
+            h.modalView = new BoundedLayout(context);
+            h.modalView.addView(displayed, new FrameLayout.LayoutParams(-1, -1));
             h.dialog = new Dialog(context);
-            h.dialog.setContentView(displayed);
+            h.dialog.setContentView(h.modalView);
+            h.view.setVisibility(View.GONE);
             h.dialog.setOnDismissListener(dialog -> { if (!h.disposed && !h.applying) h.dispatch("dismiss", null); });
-            h.view.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            h.attachment = new View.OnAttachStateChangeListener() {
                 @Override public void onViewAttachedToWindow(View v) { showDialog(h); }
                 @Override public void onViewDetachedFromWindow(View v) { dismissDialog(h); }
-            });
+            };
+            h.view.addOnAttachStateChangeListener(h.attachment);
         } else {
             h.view.addView(displayed, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -351,10 +357,14 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
                 text.setText(textValue(n));
                 styleText(text, props);
                 if (h.widget instanceof Button) {
-                    String variant = props.getOrDefault("variant", "primary");
+                    boolean navigation = Set.of("navigation-item", "tab", "segment", "breadcrumb", "link", "menu-item").contains(type);
+                    String variant = props.getOrDefault("variant", navigation ? "ghost" : "primary");
                     text.setTextColor(Set.of("warning", "ghost", "outlined").contains(variant) ? INK : Color.WHITE);
                     text.setBackground(background(variantColor(variant), dp(8), BORDER, 0));
                     text.setSelected(bool(n, "selected", false));
+                    if (navigation && text.isSelected()) {
+                        text.setTextColor(GREEN); text.setBackground(background(Color.rgb(225, 239, 231), dp(8), 0, 0));
+                    }
                 }
             }
             if (h.title != null) h.title.setText(title(n));
@@ -398,7 +408,7 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
                     "circle".equals(props.get("shape")) ? dp(999) : dp(6), 0, 0));
             if (Set.of("card", "alert", "snackbar", "dialog", "drawer").contains(type)
                     && !props.containsKey("style.background")) {
-                h.view.setBackground(background(Color.WHITE, dp(8), BORDER, dp(1)));
+                (h.modalView == null ? h.view : h.modalView).setBackground(background(Color.WHITE, dp(8), BORDER, dp(1)));
             }
             if (h.dialog != null) { h.dialog.setTitle(props.getOrDefault("title", "")); if (h.view.isAttachedToWindow()) showDialog(h); }
         } finally { h.applying = false; }
@@ -558,9 +568,9 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
                 params.rightMargin += gap; params.bottomMargin += gap;
             }
             child.view.setLayoutParams(params);
-            child.view.setVisibility(parent.node.type().equals("accordion-item") && !bool(parent.node, "expanded", false)
+            child.view.setVisibility(child.dialog != null || parent.node.type().equals("accordion-item") && !bool(parent.node, "expanded", false)
                     ? View.GONE : bool(n, "state.visible", true) ? View.VISIBLE : View.GONE);
-            index++;
+            if (child.view.getVisibility() != View.GONE) index++;
         }
         parent.target.requestLayout();
     }
@@ -577,14 +587,19 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
     }
 
     private void applyRootSize(Handle h) {
-        h.view.setLayoutParams(new ViewGroup.LayoutParams(dimension(h.node.props().get("style.width"), ViewGroup.LayoutParams.MATCH_PARENT),
-                dimension(h.node.props().get("style.height"), ViewGroup.LayoutParams.MATCH_PARENT)));
+        ViewGroup.LayoutParams params = h.view.getLayoutParams();
+        if (params == null) params = new ViewGroup.LayoutParams(0, 0);
+        // Once attached, the container owns the LayoutParams subtype (FrameLayout, LinearLayout, etc.).
+        params.width = h.dialog != null ? 0 : dimension(h.node.props().get("style.width"), ViewGroup.LayoutParams.MATCH_PARENT);
+        params.height = h.dialog != null ? 0 : dimension(h.node.props().get("style.height"), ViewGroup.LayoutParams.MATCH_PARENT);
+        h.view.setLayoutParams(params);
     }
 
     @Override public void dispose(Handle h) {
         checkThread();
         if (h.disposed) return;
         h.disposed = true;
+        if (h.attachment != null) h.view.removeOnAttachStateChangeListener(h.attachment);
         if (h.restore != null) h.view.removeCallbacks(h.restore);
         cancelImage(h);
         Throwable failure = null;
@@ -625,14 +640,14 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
 
     private void applyModifiers(Handle h) {
         Map<String, String> props = h.node.props();
-        BoundedLayout view = h.view;
+        BoundedLayout view = h.modalView == null ? h.view : h.modalView;
         String padding = props.getOrDefault("style.padding", "0dp"); String[] parts = padding.split(" ");
         int vertical = dimension(parts[0], 0), horizontal = dimension(parts.length > 1 ? parts[1] : parts[0], 0);
         view.setPadding(horizontal, vertical, horizontal, vertical);
         view.setAlpha(h.node.property(StandardProps.OPACITY, 1.0).floatValue());
         view.setElevation(dimension(props.get("style.shadow"), 0));
         view.setTranslationZ(dp(integer(h.node, "layout.zIndex", 0)));
-        view.setVisibility(bool(h.node, "state.visible", true) ? View.VISIBLE : View.GONE);
+        view.setVisibility(visible(h) ? View.VISIBLE : View.GONE);
         view.setMinimumWidth(dimension(props.get("style.minWidth"), 0));
         view.setMinimumHeight(dimension(props.get("style.minHeight"), 0));
         view.maxWidth = dimension(props.get("style.maxWidth"), Integer.MAX_VALUE);
@@ -648,9 +663,14 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
             view.setClipToOutline(dimension(props.get("style.cornerRadius"), 0) > 0);
         } else view.setBackground(null);
         h.widget.setContentDescription(props.getOrDefault("semantics.contentDescription", props.get("label")));
-        view.setTag(props.get("semantics.testTag"));
+        h.view.setTag(props.get("semantics.testTag"));
         if (props.containsKey("interaction.focusable")) h.widget.setFocusable(bool(h.node, "interaction.focusable", false));
         if (h.widget instanceof TextView text && props.containsKey("style.foreground")) text.setTextColor(color(props.get("style.foreground"), INK));
+        if (h.widget instanceof ProgressBar progress) {
+            var tint = android.content.res.ColorStateList.valueOf(color(props.get("style.foreground"), GREEN));
+            progress.setProgressTintList(tint); progress.setIndeterminateTintList(tint);
+            if (progress instanceof SeekBar bar) bar.setThumbTintList(tint);
+        }
         String role = props.get("semantics.role");
         h.widget.setAccessibilityDelegate(role == null ? null : new View.AccessibilityDelegate() {
             @Override public void onInitializeAccessibilityNodeInfo(View host, AccessibilityNodeInfo info) {
@@ -674,6 +694,7 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
         boolean enabled = inherited && h.node != null && bool(h.node, "state.enabled", true) && bool(h.node, "enabled", true);
         setEnabledRecursively(h.view, enabled);
         if (h.dialog != null) setEnabledRecursively(h.widget, enabled);
+        if (h.dialog != null && h.view.isAttachedToWindow()) showDialog(h);
         if (h.previous != null) {
             h.previous.setEnabled(enabled && integer(h.node, "currentPage", 1) > 1);
             h.next.setEnabled(enabled && integer(h.node, "currentPage", 1) < integer(h.node, "pageCount", 1));
@@ -687,13 +708,23 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
     }
 
     private void showDialog(Handle h) {
-        if (h.disposed || !bool(h.node, "state.visible", true)) { dismissDialog(h); return; }
+        if (!visible(h)) { dismissDialog(h); return; }
         if (!h.dialog.isShowing()) h.dialog.show();
         Window window = h.dialog.getWindow();
-        if (window != null && h.node.type().equals("drawer")) {
-            window.setGravity("end".equals(h.node.props().get("edge")) ? Gravity.END : Gravity.START);
-            window.setLayout((int) (context.getResources().getDisplayMetrics().widthPixels * .8), ViewGroup.LayoutParams.MATCH_PARENT);
+        if (window != null) {
+            boolean drawer = h.node.type().equals("drawer");
+            if (drawer) window.setGravity("end".equals(h.node.props().get("edge")) ? Gravity.END : Gravity.START);
+            int width = dimension(h.node.props().get("style.width"), drawer
+                    ? (int) (context.getResources().getDisplayMetrics().widthPixels * .8) : ViewGroup.LayoutParams.WRAP_CONTENT);
+            int height = dimension(h.node.props().get("style.height"), drawer ? ViewGroup.LayoutParams.MATCH_PARENT : ViewGroup.LayoutParams.WRAP_CONTENT);
+            window.setLayout(width, height);
         }
+    }
+
+    private boolean visible(Handle h) {
+        return !h.disposed && h.node != null && bool(h.node, "state.visible", true)
+                && (h.parent == null || visible(h.parent) && (!h.parent.node.type().equals("accordion-item")
+                        || bool(h.parent.node, "expanded", false)));
     }
 
     private void dismissDialog(Handle h) {
@@ -734,7 +765,8 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
         int style = weight >= 600 ? Typeface.BOLD : Typeface.NORMAL;
         if (Boolean.parseBoolean(props.get("text.italic"))) style |= Typeface.ITALIC;
         text.setTypeface(Typeface.create(props.getOrDefault("text.fontFamily", "sans-serif"), style));
-        text.setGravity(gravity(props.getOrDefault("text.align", "start")));
+        text.setGravity(props.containsKey("text.align") ? gravity(props.get("text.align"))
+                : text instanceof Button ? Gravity.CENTER : Gravity.START | Gravity.TOP);
         int lines = (int) unit(props.getOrDefault("text.maxLines", Integer.toString(Integer.MAX_VALUE)));
         text.setMaxLines(lines); text.setEllipsize(props.containsKey("text.maxLines") ? TextUtils.TruncateAt.END : null);
         text.setLineSpacing(0, (float) unit(props.getOrDefault("text.lineHeight", "1")));
@@ -810,6 +842,8 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
     public final class Handle {
         private ViewNode node;
         private final BoundedLayout view;
+        private BoundedLayout modalView;
+        private View.OnAttachStateChangeListener attachment;
         private View widget;
         private ViewGroup target;
         private TextView title, detail;
@@ -838,7 +872,8 @@ public final class VelaAndroidBackend implements RendererBackend<VelaAndroidBack
 
     private final class LazyAdapter extends BaseAdapter implements AutoCloseable {
         private final Handle owner;
-        private final Set<Row> rows = Collections.newSetFromMap(new IdentityHashMap<>());
+        // Active/recycled views own their row through the tag; discarded platform scraps must be collectable.
+        private final Set<Row> rows = Collections.newSetFromMap(new WeakHashMap<>());
         private final Map<String, Long> ids = new HashMap<>();
         private final Map<String, Integer> positions = new HashMap<>();
         LazyAdapter(Handle owner) { this.owner = owner; }
