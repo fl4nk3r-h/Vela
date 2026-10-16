@@ -13,7 +13,7 @@
 
 Vela is a small Java UI experiment inspired by declarative component systems such as Jetpack Compose. A screen is modeled as a `VelaComponent`; each render pass returns an immutable `ViewNode` tree; state mutations mark the component dirty; and a renderer turns the tree into output.
 
-The core includes diagnostic text rendering and a retained renderer contract. The Android showcase contains an experimental native renderer; it currently uses manual scheduling and has not been adapted to the retained core runtime. Desktop, web, and terminal UI backends remain planned.
+The core includes diagnostic text rendering and a retained renderer contract. The shared `vela-android` library implements that contract with native widgets and a frame scheduler; Daymark consumes it. Desktop, web, and terminal UI backends remain planned.
 
 ## Mental Model
 
@@ -185,7 +185,7 @@ ViewNode badge = ViewNode.node(
 );
 ```
 
-All props are currently stored as `String` values. Events are stored separately as typed handlers and are exposed only through `eventNames()` and `dispatch(...)`. Children, props, and event maps are copied into unmodifiable collections when the node is created.
+`PropKey<T>` supplies typed property access and `StandardProps` validates shared properties. The public `props()` map retains string wire values for backend compatibility. Events are stored separately as typed handlers and are exposed only through `eventNames()` and `dispatch(...)`. Children, props, and event maps are copied into unmodifiable collections when the node is created.
 
 For richer custom nodes, use the builder:
 
@@ -246,6 +246,8 @@ Run the demo app:
 ```bash
 ./gradlew :app:run
 ```
+
+See [Android backend](android-backend.md) for native mounting and capabilities, and [Runtime guide](runtime-guide.md) for child scopes, saveable state, scoped cancellation, and dispatch.
 
 ## Related Pages
 

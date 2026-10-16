@@ -13,7 +13,7 @@
 
 Vela provides a declarative component catalog that produces immutable `ViewNode` trees. Components describe intent: layout, content, interaction, state, styling, and accessibility semantics. A renderer backend is responsible for turning that description into platform UI and dispatching platform events back to the node.
 
-The built-in `VelaRenderer` remains a diagnostic text renderer. It exposes the complete tree, props, stable keys, and registered event names, but it does not draw graphical controls.
+The built-in `VelaRenderer` remains a diagnostic text renderer. It exposes the tree, props, stable keys, and registered event names. Password fields and nodes marked with `Builder.sensitive()` redact their values, keys, and descendants. It does not draw graphical controls.
 
 ## Component Catalog
 
@@ -25,6 +25,7 @@ The built-in `VelaRenderer` remains a diagnostic text renderer. It exposes the c
 | `VelaRow` | Horizontal layout | arrangement, alignment, gap, modifier |
 | `VelaBox` | Stacked or overlaid content | content alignment |
 | `VelaGrid` | Fixed-column grid | column count and gap |
+| `VelaLazyList`, `VelaLazyGrid` | Virtualized native collections | count, stable key factory, item factory |
 | `VelaSpacer` | Explicit layout space | horizontal, vertical, or two-dimensional size |
 | `VelaScroll` | Scrollable content wrapper | horizontal or vertical orientation |
 | `VelaSurface` | Styled visual surface | modifier and arbitrary children |
@@ -137,9 +138,9 @@ ViewNode field = VelaTextField.of(
 field.dispatch("change", "vela@example.com");
 ```
 
-Use `dispatch("click")` for actions without a payload. `dispatch` returns `false` when the node does not register that event. Input components validate payload type and range before calling application code.
+Use `dispatch("click")` for actions without a payload. `dispatch` returns `false` when the node does not register that event. Input components validate payload type and range before calling application code. Sliders snap to their declared steps using `SliderRange`, with the maximum included as a selectable endpoint.
 
-Disabled buttons do not register click handlers. Other disabled inputs retain their event description but ignore dispatched changes, allowing a renderer to expose their full semantic contract while respecting disabled state.
+Disabled buttons do not register click handlers. `ViewNode.dispatch` rejects locally disabled nodes for all event types, including inputs disabled through `Modifier.enabled(false)`. The Android backend also disables descendants and suppresses callbacks under a disabled ancestor.
 
 ## Modifiers
 
@@ -168,6 +169,25 @@ Modifier cardModifier = Modifier.none()
 ```
 
 Dimensions use density-independent `dp` metadata. Font sizes use `sp` metadata. A renderer maps those units to its platform.
+
+## Typed Properties And Lazy Items
+
+`PropKey<T>` provides typed property encoding/decoding while preserving `props()` as a compatible string wire map. `StandardProps` validates shared boolean and numeric properties at node construction. Backends can add explicit typed keys for their extensions. For example:
+
+```java
+ViewNode node = ViewNode.builder("text").prop(StandardProps.ENABLED, false).build();
+boolean enabled = node.property(StandardProps.ENABLED, true);
+```
+
+Lazy factories describe data without allocating every item node:
+
+```java
+ViewNode rows = VelaLazyList.of(
+    items.size(), i -> items.get(i).id(), i -> VelaText.of(items.get(i).label()),
+    Modifier.none().fillMaxWidth().height(400));
+```
+
+Keys must be unique and stable. The Android adapter creates visible/recycled rows and refreshes their callbacks. Give a lazy collection a constrained viewport; do not nest it inside an unconstrained same-axis scroll view. `VelaList` and `VelaGrid` remain eager alternatives for small data sets.
 
 ## Typography
 
@@ -211,7 +231,7 @@ ViewNode item = VelaListItem.of(
 
 ## Renderer Contract
 
-A retained backend can implement `RendererBackend<H>` and use `MountedTree` or `VelaRuntime` to preserve host handles. See the [runtime guide](runtime-guide.md) for mounting, property/event updates, child ordering, and disposal. The Android showcase has not yet migrated to this contract.
+A retained backend can implement `RendererBackend<H>` and use `MountedTree` or `VelaRuntime` to preserve host handles. See the [runtime guide](runtime-guide.md) for mounting, property/event updates, child ordering, and disposal. The shared `vela-android` backend implements this contract; see its [capability matrix](android-backend.md).
 
 A graphical renderer should:
 

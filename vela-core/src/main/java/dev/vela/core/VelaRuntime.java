@@ -7,9 +7,9 @@ public final class VelaRuntime<H> implements AutoCloseable {
     private final MountedTree<H> tree;
     private final FrameScheduler scheduler;
     private final Thread owner = Thread.currentThread();
-    private boolean mounted;
+    private volatile boolean mounted;
     private boolean attached;
-    private boolean closed;
+    private volatile boolean closed;
     private boolean rendering;
     private boolean queued;
     private boolean scheduling;
@@ -59,6 +59,21 @@ public final class VelaRuntime<H> implements AutoCloseable {
         invalidate();
     }
 
+    /** Marshal a result to the owner thread. The scheduler must accept calls from this thread. */
+    public void dispatch(Runnable action) {
+        Objects.requireNonNull(action, "action");
+        if (closed) return;
+        if (!mounted) throw new IllegalStateException("Runtime is not mounted");
+        try {
+            scheduler.schedule(() -> {
+                checkThread();
+                if (mounted && !closed) action.run();
+            });
+        } catch (IllegalStateException failure) {
+            if (!closed) throw failure;
+        }
+    }
+
     public void flush() {
         checkMounted();
         if (rendering) {
@@ -81,9 +96,8 @@ public final class VelaRuntime<H> implements AutoCloseable {
     }
 
     private void renderPass() {
-        component.consumeDirty();
         try {
-            tree.render(Objects.requireNonNull(component.render(), "render tree"));
+            tree.render(component.renderManaged(false));
         } catch (RuntimeException | Error failure) {
             try {
                 component.markDirty();
@@ -151,7 +165,7 @@ public final class VelaRuntime<H> implements AutoCloseable {
         } finally {
             if (attached) {
                 try {
-                    component.onUnmount();
+                    component.unmountManaged();
                 } finally {
                     component.detachRuntime();
                     attached = false;

@@ -5,6 +5,7 @@ import java.util.function.DoubleConsumer;
 
 import dev.vela.core.ViewNode;
 import dev.vela.ui.Modifier;
+import dev.vela.ui.SliderRange;
 
 public final class VelaSlider {
     private VelaSlider() {
@@ -18,22 +19,17 @@ public final class VelaSlider {
             double step,
             DoubleConsumer onValueChange,
             Modifier modifier) {
-        if (!Double.isFinite(minimum) || !Double.isFinite(maximum) || maximum <= minimum) {
-            throw new IllegalArgumentException("maximum must be greater than minimum");
-        }
+        SliderRange range = new SliderRange(minimum, maximum, step);
         ComponentSupport.requireRange(value, minimum, maximum, "value");
-        if (!Double.isFinite(step) || step <= 0 || step > maximum - minimum) {
-            throw new IllegalArgumentException("step must be positive and no larger than the range");
-        }
         Objects.requireNonNull(onValueChange, "onValueChange");
         return ComponentSupport.node("slider", modifier.role("slider"))
                 .prop("label", ComponentSupport.requireText(label, "label"))
-                .prop("value", value)
+                .prop("value", range.snap(value))
                 .prop("minimum", minimum)
                 .prop("maximum", maximum)
                 .prop("step", step)
-                .on("change", event -> onValueChange.accept(ComponentSupport.requireRange(
-                        ComponentSupport.doubleValue(event.value(), "change"), minimum, maximum, "value")))
+                .on("change", event -> onValueChange.accept(range.snap(
+                        ComponentSupport.doubleValue(event.value(), "change"))))
                 .build();
     }
 }

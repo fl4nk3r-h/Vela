@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="vela_previous">Previous</string>
+    <string name="vela_next">Next</string>
+    <string name="vela_submit">Submit</string>
+    <string name="vela_action">Action</string>
+    <string name="vela_dismiss">Dismiss</string>
+    <string name="vela_remove">Remove</string>
+    <string name="vela_copy">Copy</string>
+    <string name="vela_expand">Expand</string>
+    <string name="vela_collapse">Collapse</string>
+    <string name="vela_page_count">%1$d / %2$d</string>
+</resources>

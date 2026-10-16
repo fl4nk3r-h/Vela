@@ -27,5 +27,5 @@ gradle-app.setting
 # VS Code settings
 .vscode/
 
-# GitHub Actions workflow files
-.github/workflows/
+# Class Files
+*.class

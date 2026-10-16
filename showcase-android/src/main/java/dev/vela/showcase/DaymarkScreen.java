@@ -7,7 +7,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
-import dev.vela.annotation.State;
+import dev.vela.core.MutableState;
+import dev.vela.core.StateCodec;
 import dev.vela.components.VelaAlert;
 import dev.vela.components.VelaAvatar;
 import dev.vela.components.VelaBadge;
@@ -67,26 +68,18 @@ public final class DaymarkScreen extends VelaComponent {
 
     private final Runnable invalidate;
 
-    @State
-    private int selectedPage;
-    @State
-    private int waterGlasses = 5;
-    @State
-    private int focusSessions = 2;
-    @State
-    private boolean focusActive;
-    @State
-    private boolean quietNotifications = true;
-    @State
-    private double energy = 72;
-    @State
-    private boolean planTaskDone = true;
-    @State
-    private boolean designTaskDone;
-    @State
-    private boolean walkTaskDone;
-    @State
-    private String weekMode = "Balanced";
+    private final MutableState<Integer> selectedPage = saveableState("selectedPage", 0, StateCodec.INTEGER);
+    private final MutableState<Integer> waterGlasses = saveableState("waterGlasses", 5, StateCodec.INTEGER);
+    private final MutableState<Integer> focusSessions = saveableState("focusSessions", 2, StateCodec.INTEGER);
+    private final MutableState<Boolean> focusActive = saveableState("focusActive", false, StateCodec.BOOLEAN);
+    private final MutableState<Boolean> quietNotifications = saveableState("quietNotifications", true, StateCodec.BOOLEAN);
+    private final MutableState<Double> energy = saveableState("energy", 72.0, StateCodec.DOUBLE);
+    private final MutableState<Boolean> planTaskDone = saveableState("planTaskDone", true, StateCodec.BOOLEAN);
+    private final MutableState<Boolean> designTaskDone = saveableState("designTaskDone", false, StateCodec.BOOLEAN);
+    private final MutableState<Boolean> walkTaskDone = saveableState("walkTaskDone", false, StateCodec.BOOLEAN);
+    private final MutableState<String> weekMode = saveableState("weekMode", "Balanced", StateCodec.STRING);
+
+    public DaymarkScreen() { this(() -> { }); }
 
     public DaymarkScreen(Runnable invalidate) {
         this.invalidate = Objects.requireNonNull(invalidate, "invalidate");
@@ -117,15 +110,15 @@ public final class DaymarkScreen extends VelaComponent {
     private ViewNode navigation() {
         return VelaNavigationBar.of(
                 Modifier.none().fillMaxWidth().background("#FFFFFF").padding(8),
-                VelaNavigationBar.item("Today", "sun", selectedPage == 0, () -> selectPage(0), Modifier.none()),
+                VelaNavigationBar.item("Today", "sun", selectedPage.get() == 0, () -> selectPage(0), Modifier.none()),
                 VelaNavigationBar.item(
-                        "Insights", "chart", selectedPage == 1, () -> selectPage(1), Modifier.none()),
+                        "Insights", "chart", selectedPage.get() == 1, () -> selectPage(1), Modifier.none()),
                 VelaNavigationBar.item(
-                        "Profile", "person", selectedPage == 2, () -> selectPage(2), Modifier.none()));
+                        "Profile", "person", selectedPage.get() == 2, () -> selectPage(2), Modifier.none()));
     }
 
     private ViewNode pageContent() {
-        return switch (selectedPage) {
+        return switch (selectedPage.get()) {
             case 1 -> insightsPage();
             case 2 -> profilePage();
             default -> todayPage();
@@ -133,7 +126,7 @@ public final class DaymarkScreen extends VelaComponent {
     }
 
     private ViewNode todayPage() {
-        ViewNode focusStatus = focusActive
+        ViewNode focusStatus = focusActive.get()
                 ? VelaAlert.of(
                         "Focus is running",
                         "A quiet 25-minute block is in progress.",
@@ -182,26 +175,26 @@ public final class DaymarkScreen extends VelaComponent {
                         8,
                         Modifier.none().fillMaxWidth(),
                         VelaChip.of("DEEP WORK", ComponentVariant.WARNING, null, Modifier.none()),
-                        VelaBadge.of(focusSessions + " sessions", ComponentVariant.SUCCESS, Modifier.none())),
+                        VelaBadge.of(focusSessions.get() + " sessions", ComponentVariant.SUCCESS, Modifier.none())),
                 VelaText.of(
-                        focusActive ? "Stay with one thing." : "Ready for a clear hour?",
+                        focusActive.get() ? "Stay with one thing." : "Ready for a clear hour?",
                         TextStyle.defaultStyle().fontSize(24).fontWeight(700).color("#FFFFFF"),
                         Modifier.none()),
                 VelaText.of(
-                        focusActive
+                        focusActive.get()
                                 ? "Notifications are tucked away. You have this."
                                 : "Start a focused block and move the important work forward.",
                         TextStyle.defaultStyle().fontSize(14).color("#C8D2CC").lineHeight(1.35),
                         Modifier.none()),
                 VelaProgressIndicator.determinate(
-                        Math.min(focusSessions / 4.0, 1),
+                        Math.min(focusSessions.get() / 4.0, 1),
                         VelaProgressIndicator.Style.LINEAR,
                         Modifier.none().fillMaxWidth().foreground("#E9B44C")),
                 VelaButton.of(
-                        focusActive ? "Finish focus" : "Start focus",
-                        focusActive ? ComponentVariant.SECONDARY : ComponentVariant.WARNING,
+                        focusActive.get() ? "Finish focus" : "Start focus",
+                        focusActive.get() ? ComponentVariant.SECONDARY : ComponentVariant.WARNING,
                         true,
-                        focusActive ? this::completeFocus : this::startFocus,
+                        focusActive.get() ? this::completeFocus : this::startFocus,
                         Modifier.none().fillMaxWidth()));
     }
 
@@ -212,9 +205,9 @@ public final class DaymarkScreen extends VelaComponent {
                 VelaList.of(
                         true,
                         Modifier.none().fillMaxWidth(),
-                        task("Shape the launch plan", "09:30", planTaskDone, value -> updatePlanTask(value)),
-                        task("Review the mobile experience", "13:00", designTaskDone, value -> updateDesignTask(value)),
-                        task("Take a screen-free walk", "18:30", walkTaskDone, value -> updateWalkTask(value))));
+                        task("Shape the launch plan", "09:30", planTaskDone.get(), value -> updatePlanTask(value)),
+                        task("Review the mobile experience", "13:00", designTaskDone.get(), value -> updateDesignTask(value)),
+                        task("Take a screen-free walk", "18:30", walkTaskDone.get(), value -> updateWalkTask(value))));
     }
 
     private ViewNode task(String label, String time, boolean checked, java.util.function.Consumer<Boolean> onChange) {
@@ -232,15 +225,15 @@ public final class DaymarkScreen extends VelaComponent {
                 ComponentVariant.OUTLINED,
                 Modifier.none().background("#EAF2F8").padding(14).cornerRadius(8),
                 VelaText.of("Hydration", CARD_TITLE, Modifier.none()),
-                VelaText.of(waterGlasses + " / 8 glasses", BODY, Modifier.none()),
+                VelaText.of(waterGlasses.get() + " / 8 glasses", BODY, Modifier.none()),
                 VelaProgressIndicator.determinate(
-                        waterGlasses / 8.0,
+                        waterGlasses.get() / 8.0,
                         VelaProgressIndicator.Style.LINEAR,
                         Modifier.none().fillMaxWidth().foreground("#3D6FB6")),
                 VelaButton.of(
                         "+ Glass",
                         ComponentVariant.GHOST,
-                        waterGlasses < 8,
+                        waterGlasses.get() < 8,
                         this::addWater,
                         Modifier.none().fillMaxWidth()));
     }
@@ -250,8 +243,8 @@ public final class DaymarkScreen extends VelaComponent {
                 ComponentVariant.OUTLINED,
                 Modifier.none().background("#FFF4E5").padding(14).cornerRadius(8),
                 VelaText.of("Energy", CARD_TITLE, Modifier.none()),
-                VelaText.of(Math.round(energy) + "% steady", BODY, Modifier.none()),
-                VelaSlider.of("Energy", energy, 0, 100, 1, this::updateEnergy, Modifier.none().fillMaxWidth()),
+                VelaText.of(Math.round(energy.get()) + "% steady", BODY, Modifier.none()),
+                VelaSlider.of("Energy", energy.get(), 0, 100, 1, this::updateEnergy, Modifier.none().fillMaxWidth()),
                 VelaChip.of(energyLabel(), ComponentVariant.WARNING, null, Modifier.none()));
     }
 
@@ -270,7 +263,7 @@ public final class DaymarkScreen extends VelaComponent {
                                 VelaText.of("Keep non-essential alerts out of your day.", BODY, Modifier.none())),
                         VelaSwitch.of(
                                 "Quiet notifications",
-                                quietNotifications,
+                                quietNotifications.get(),
                                 true,
                                 this::updateQuietNotifications,
                                 Modifier.none())));
@@ -301,7 +294,7 @@ public final class DaymarkScreen extends VelaComponent {
                                 List.of("Tue", "3 blocks", "81%"),
                                 List.of("Wed", "2 blocks", "72%"),
                                 List.of("Thu", "4 blocks", "86%"),
-                                List.of("Fri", focusSessions + " blocks", Math.round(energy) + "%")),
+                                List.of("Fri", focusSessions.get() + " blocks", Math.round(energy.get()) + "%")),
                         Modifier.none().fillMaxWidth().background("#FFFFFF").padding(12).cornerRadius(8)),
                 VelaCard.of(
                         ComponentVariant.OUTLINED,
@@ -310,7 +303,7 @@ public final class DaymarkScreen extends VelaComponent {
                         VelaText.of("Choose the rhythm you want Daymark to encourage.", BODY, Modifier.none()),
                         VelaSegmentedControl.of(
                                 List.of("Gentle", "Balanced", "Ambitious"),
-                                weekMode,
+                                weekMode.get(),
                                 this::updateWeekMode,
                                 Modifier.none().fillMaxWidth())),
                 VelaSpacer.vertical(12));
@@ -339,21 +332,21 @@ public final class DaymarkScreen extends VelaComponent {
                         VelaDivider.horizontal(),
                         VelaKeyValue.of(
                                 Map.of(
-                                        "Current pace", weekMode,
-                                        "Focus sessions", Integer.toString(focusSessions),
+                                        "Current pace", weekMode.get(),
+                                        "Focus sessions", Integer.toString(focusSessions.get()),
                                         "Tasks completed", Integer.toString(completedTasks()),
-                                        "Hydration", waterGlasses + " of 8"),
+                                        "Hydration", waterGlasses.get() + " of 8"),
                                 Modifier.none().fillMaxWidth())),
                 VelaCard.of(
                         ComponentVariant.OUTLINED,
                         Modifier.none().fillMaxWidth().background("#FFFFFF").padding(8).cornerRadius(8),
                         VelaListItem.of(
                                 "Quiet notifications",
-                                quietNotifications ? "Enabled" : "Disabled",
+                                quietNotifications.get() ? "Enabled" : "Disabled",
                                 null,
                                 VelaSwitch.of(
                                         "Quiet notifications",
-                                        quietNotifications,
+                                        quietNotifications.get(),
                                         true,
                                         this::updateQuietNotifications,
                                         Modifier.none()),
@@ -395,76 +388,28 @@ public final class DaymarkScreen extends VelaComponent {
     }
 
     private int completedTasks() {
-        return (planTaskDone ? 1 : 0) + (designTaskDone ? 1 : 0) + (walkTaskDone ? 1 : 0);
+        return (planTaskDone.get() ? 1 : 0) + (designTaskDone.get() ? 1 : 0) + (walkTaskDone.get() ? 1 : 0);
     }
 
     private String energyLabel() {
-        if (energy >= 80) {
+        if (energy.get() >= 80) {
             return "HIGH";
         }
-        if (energy >= 50) {
+        if (energy.get() >= 50) {
             return "STEADY";
         }
         return "REST";
     }
 
-    private void selectPage(int page) {
-        if (selectedPage != page) {
-            selectedPage = page;
-            markDirty();
-        }
-    }
-
-    private void startFocus() {
-        focusActive = true;
-        markDirty();
-    }
-
-    private void stopFocus() {
-        focusActive = false;
-        markDirty();
-    }
-
-    private void completeFocus() {
-        focusActive = false;
-        focusSessions++;
-        markDirty();
-    }
-
-    private void addWater() {
-        if (waterGlasses < 8) {
-            waterGlasses++;
-            markDirty();
-        }
-    }
-
-    private void updateEnergy(double value) {
-        energy = value;
-        markDirty();
-    }
-
-    private void updateQuietNotifications(boolean enabled) {
-        quietNotifications = enabled;
-        markDirty();
-    }
-
-    private void updatePlanTask(boolean completed) {
-        planTaskDone = completed;
-        markDirty();
-    }
-
-    private void updateDesignTask(boolean completed) {
-        designTaskDone = completed;
-        markDirty();
-    }
-
-    private void updateWalkTask(boolean completed) {
-        walkTaskDone = completed;
-        markDirty();
-    }
-
-    private void updateWeekMode(String mode) {
-        weekMode = mode;
-        markDirty();
-    }
+    private void selectPage(int page) { selectedPage.set(page); }
+    private void startFocus() { focusActive.set(true); }
+    private void stopFocus() { focusActive.set(false); }
+    private void completeFocus() { focusActive.set(false); focusSessions.update(value -> value + 1); }
+    private void addWater() { waterGlasses.update(value -> Math.min(8, value + 1)); }
+    private void updateEnergy(double value) { energy.set(value); }
+    private void updateQuietNotifications(boolean enabled) { quietNotifications.set(enabled); }
+    private void updatePlanTask(boolean completed) { planTaskDone.set(completed); }
+    private void updateDesignTask(boolean completed) { designTaskDone.set(completed); }
+    private void updateWalkTask(boolean completed) { walkTaskDone.set(completed); }
+    private void updateWeekMode(String mode) { weekMode.set(mode); }
 }

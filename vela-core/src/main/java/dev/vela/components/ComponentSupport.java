@@ -3,6 +3,7 @@ package dev.vela.components;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.Locale;
 
 import dev.vela.core.ViewNode;
 import dev.vela.ui.Modifier;
@@ -21,7 +22,7 @@ final class ComponentSupport {
     }
 
     static String enumValue(Enum<?> value) {
-        return Objects.requireNonNull(value, "value").name().toLowerCase().replace('_', '-');
+        return Objects.requireNonNull(value, "value").name().toLowerCase(Locale.ROOT).replace('_', '-');
     }
 
     static String requireText(String value, String name) {

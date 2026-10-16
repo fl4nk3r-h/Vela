@@ -80,7 +80,33 @@ A root component can be attached to only one runtime at a time. The runtime call
 
 Do not manually consume dirty flags or add a second scheduling owner to a component managed by `VelaRuntime`. `onStateChanged()` remains available for compatibility with manual integrations. Mount/unmount hooks do not run when a caller uses `render()` directly.
 
-Nested component scopes, saveable state, process restoration, and lifecycle-bound effects remain planned.
+### Stateful Child Scopes
+
+Use `child(key, stableComponentInstance)` inside a managed `render()` to attach child state and lifecycle to the runtime:
+
+```java
+private final CounterScreen counter = new CounterScreen();
+
+@Override public ViewNode render() {
+    return VelaColumn.of(child("counter", counter), VelaText.of("Other content"));
+}
+```
+
+Keep child instances stable. Keys are unique within their owning component. A child mounts once, updates independently, and unmounts when omitted or replaced. Calling `child.render()` directly bypasses these facilities. `child(...)` requires a runtime-managed render pass and returns a transparent component node.
+
+A child invalidation refreshes its description while retaining its parent's and unaffected siblings' cached descriptions. When a parent itself renders, child descriptions are refreshed too, so changed inputs and callbacks remain current. This is explicit component-scoped invalidation; arbitrary state reads across unrelated owners are not dependency-tracked.
+
+### Saveable State And Scoped Resources
+
+Declare explicit state codecs for values that must survive recreation:
+
+```java
+private final MutableState<Integer> count = saveableState("count", 0, StateCodec.INTEGER);
+```
+
+`saveState()` returns a portable `StateSnapshot`; `restoreState(snapshot)` applies values and pending keyed child snapshots. Restore before mounting for initial restoration. Built-in codecs support strings, integers, longs, finite doubles, and booleans; custom `StateCodec<T>` values supply encode/decode functions. Saveable initial values and decoded values must be non-null. Ordinary `state(...)` still supports null and remains transient.
+
+Register mount-owned cancellation in `onMount()` with `onDispose(autoCloseable)`. Resources are closed in reverse registration order; cleanup continues after failures. Use `runtime.dispatch(action)` to deliver asynchronous results on the owner thread when the scheduler accepts cross-thread posting. Queued and late results are dropped after closure. `AndroidFrameScheduler` supplies that thread-safe integration and physical callback cancellation. Native Bundle and view restoration are documented in [Android backend](android-backend.md).
 
 ## Renderer Backend
 
@@ -96,9 +122,9 @@ Nested component scopes, saveable state, process restoration, and lifecycle-boun
 
 Give each runtime its own backend/container. The child list supplied to `setChildren` is immutable. Backend-specific internal widget children are distinct from the managed children described by Vela nodes.
 
-`update` runs for retained nodes even if their visible props are equal. This ensures event callbacks capture current application state. A backend can skip unchanged visual properties, but must still refresh its event bindings. Child-order updates are omitted entirely when handle order is unchanged.
+`update` runs for retained nodes with a new description even if their visible props are equal. This ensures event callbacks capture current application state. A backend can skip unchanged visual properties, but must still refresh its event bindings. Child-order updates are omitted entirely when handle order is unchanged.
 
-The Android showcase currently uses its original recursive renderer and manual scheduler. It has not yet been adapted to this contract, so native Android view retention is a separate roadmap milestone.
+The shared `vela-android` backend implements this contract. Daymark mounts it through `VelaRuntime` and `AndroidFrameScheduler`; it preserves native controls between state updates. See [Android backend](android-backend.md).
 
 ## Identity And Reconciliation
 
@@ -108,7 +134,7 @@ Keys identify children within one parent. Keyed children retain their handles ac
 
 Duplicate sibling keys are rejected before the incoming tree mutates backend state. Removed children are detached before disposal. Teardown attempts remaining handles even if one disposal throws.
 
-The core uses keyed maps and ordered lists for linear matching at each sibling group. Backend operations may have their own costs. This is full root-tree traversal with retained hosts, not fine-grained or sublinear recomposition.
+The core uses keyed maps and ordered lists for linear matching at each changed sibling group. Identical immutable node instances skip patching and cached key validation. Managed child scopes reuse unaffected descriptions. Eager trees created afresh still require traversal; use component boundaries and `VelaLazyList`/`VelaLazyGrid` for large collections. There is no automatic global state-read dependency tracking or separate layout/paint invalidation system.
 
 ## Verification
 

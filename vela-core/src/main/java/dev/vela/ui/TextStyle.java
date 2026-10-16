@@ -4,6 +4,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Locale;
 
 public final class TextStyle {
     private static final TextStyle DEFAULT = new TextStyle(Map.of());
@@ -45,7 +46,7 @@ public final class TextStyle {
     }
 
     public TextStyle align(Alignment alignment) {
-        return property("text.align", Objects.requireNonNull(alignment, "alignment").name().toLowerCase());
+        return property("text.align", Objects.requireNonNull(alignment, "alignment").name().toLowerCase(Locale.ROOT));
     }
 
     public TextStyle lineHeight(double multiplier) {
