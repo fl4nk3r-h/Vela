@@ -13,7 +13,42 @@ allprojects {
 }
 
 subprojects {
+    plugins.withId('java') {
+        java.toolchain.languageVersion = JavaLanguageVersion.of(
+                providers.gradleProperty('velaJavaVersion').getOrElse('25').toInteger())
+        tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+        tasks.named('compileJava', JavaCompile) { options.release = 17 }
+    }
     tasks.withType(Test).configureEach {
         useJUnitPlatform()
+    }
+    plugins.withId('java-library') {
+        apply plugin: 'maven-publish'
+        if (name != 'vela-gradle-plugin') {
+            publishing.publications.create('mavenJava', MavenPublication) { from components.java }
+        }
+    }
+    plugins.withId('com.android.library') {
+        apply plugin: 'maven-publish'
+        android.publishing.singleVariant('release') { withSourcesJar() }
+        afterEvaluate {
+            publishing.publications.create('release', MavenPublication) { from components.release }
+        }
+    }
+    plugins.withId('maven-publish') {
+        publishing.repositories.maven {
+            name = 'Vela'
+            url = rootProject.layout.buildDirectory.dir('repository')
+        }
+    }
+}
+
+tasks.register('stageVelaArtifacts') {
+    group = 'distribution'
+    description = 'Stage framework and plugin artifacts in the local distribution repository.'
+}
+gradle.projectsEvaluated {
+    subprojects.findAll { it.plugins.hasPlugin('maven-publish') }.each { module ->
+        tasks.named('stageVelaArtifacts') { dependsOn("${module.path}:publishAllPublicationsToVelaRepository") }
     }
 }

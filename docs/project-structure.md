@@ -11,7 +11,7 @@
 
 ## Overview
 
-Vela is a Java 21 Gradle workspace split into reusable runtime, compiler, console demo, and Android showcase modules.
+Vela defaults to JDK 25, emits Java 17 shared runtime bytecode, and checks JVM compatibility on Java 21 and 25. Runtime, Android hosting, build tooling, and debug reload have separate dependency boundaries.
 
 ## Module Ownership
 
@@ -19,9 +19,14 @@ Vela is a Java 21 Gradle workspace split into reusable runtime, compiler, consol
 | --- | --- | --- |
 | `vela-core` | Runtime component model, immutable view tree, UI catalog, modifiers, events, state dirtiness, and text rendering | No project dependency |
 | `vela-compiler` | Annotation processor that validates `@State` fields | Depends on `vela-core` |
-| `app` | Runnable counter example and integration tests | Depends on `vela-core`; applies `vela-compiler` as an annotation processor |
+| `app` | Runnable counter example and integration tests | Depends on `vela-core` |
 | `vela-android` | Retained native widgets, frame scheduling, image loading, lazy adapters, and Bundle state | Depends on `vela-core` |
-| `showcase-android` | Native Daymark application and Activity integration | Depends on `vela-android`; applies `vela-compiler` as an annotation processor |
+| `showcase-android` | Native Daymark application and Activity integration | Depends on `vela-android` |
+| `vela-tooling` | YAML validation, configuration, and cached resource generation | Depends on `vela-core`; YAML parsing stays outside Android |
+| `vela-gradle-plugin` | Android bootstrap and resource/reload tasks | Depends on Gradle and `vela-tooling` |
+| `vela-cli` | Project creation, verified setup, build commands, and file watching | Depends on `vela-tooling` and `vela-dev-protocol` |
+| `vela-dev-protocol` | Bounded authenticated development messages | No project dependency |
+| `vela-devtools-android` | Debug socket, staged code reload, and restart checkpoints | Depends on `vela-android` and `vela-dev-protocol`; debug applications only |
 
 Keep shared framework behavior in `vela-core`. Keep compile-time checks in `vela-compiler`. Keep console examples in `app`, reusable Android behavior in `vela-android`, and showcase-only screens in `showcase-android`. Android modules are optional; `-Pandroid=false` excludes them, while `-Pandroid=true` enables them.
 
@@ -31,10 +36,11 @@ Keep shared framework behavior in `vela-core`. Keep compile-time checks in `vela
 
 | Package | Key types | Responsibility |
 | --- | --- | --- |
-| `dev.vela.annotation` | `State` | Marks mutable fields that participate in component state |
+| `dev.vela.annotation` | `State` | Optional validation marker; does not observe field assignments |
 | `dev.vela.components` | Layouts, controls, navigation, feedback, overlays, and data display | Typed factories for semantic `ViewNode` shapes |
 | `dev.vela.core` | `VelaComponent`, `MutableState`, `VelaRuntime`, `MountedTree`, `RendererBackend`, `ViewNode`, `UiEvent`, `VelaRenderer` | State, mounting, scheduling, reconciliation, view data, events, and text output |
 | `dev.vela.ui` | `Modifier`, `TextStyle`, alignment, arrangement, orientation, variants | Shared immutable UI configuration |
+| `dev.vela.resources` | `ResourceCatalog`, `ResourceResolver` | Portable resource data and locale-scoped lookup |
 
 ### `vela-compiler`
 
@@ -50,7 +56,7 @@ Keep shared framework behavior in `vela-core`. Keep compile-time checks in `vela
 
 ### `vela-android`
 
-`dev.vela.android` contains `VelaAndroidBackend`, `AndroidFrameScheduler`, `AndroidState`, and `ImageLoader`. Instrumented tests live in `src/androidTest`.
+`dev.vela.android` contains `VelaActivity`, `VelaAndroidBackend`, `AndroidFrameScheduler`, `AndroidState`, and `ImageLoader`. Instrumented tests live in `src/androidTest`.
 
 ### `showcase-android`
 
@@ -61,16 +67,19 @@ Keep shared framework behavior in `vela-core`. Keep compile-time checks in `vela
 ## Dependency Flow
 
 ```text
-app
-├── runtime dependency ──> vela-core
-└── annotation processor ─> vela-compiler ──> vela-core
+app ---------------------> vela-core
+showcase-android ---------> vela-android ---> vela-core
+vela-tooling -------------> vela-core
+vela-gradle-plugin -------> vela-tooling
+vela-cli ----------------> vela-tooling + vela-dev-protocol
+vela-devtools-android ----> vela-android + vela-dev-protocol
 
-showcase-android
-├── runtime dependency ──> vela-android ──> vela-core
-└── annotation processor ─> vela-compiler ──> vela-core
+Optional annotation processor: vela-compiler ---> vela-core
+Generated debug apps: vela-android + vela-devtools-android
+Generated release apps: vela-android
 ```
 
-The compiler is active during `app` compilation. It does not replace runtime state management; it validates source-level use of `@State` before the application runs.
+The annotation processor is opt-in. It validates source-level `@State` usage and does not replace observable state holders. Generated applications use ordinary Java compilation and cached resource-generation tasks. See the [developer workflow](developer-workflow.md) for module commands and generated application structure.
 
 Daymark follows the same retained runtime flow through `VelaAndroidBackend` and `AndroidFrameScheduler`. Its saveable observable state is restored before mounting; native view state is restored afterward. The Activity closes the runtime, backend, and scheduler on destruction.
 

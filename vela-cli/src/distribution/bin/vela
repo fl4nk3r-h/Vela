@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+vela_dist_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+exec "$vela_dist_dir/runtime/bin/java" -cp "$vela_dist_dir/lib/*" dev.vela.cli.Vela "$@"

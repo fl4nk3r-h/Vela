@@ -16,9 +16,7 @@
 
 package dev.vela.app;
 
-import dev.vela.components.VelaButton;
-import dev.vela.components.VelaColumn;
-import dev.vela.components.VelaText;
+import static dev.vela.ui.UI.*;
 import dev.vela.core.MutableState;
 import dev.vela.core.VelaComponent;
 import dev.vela.core.ViewNode;
@@ -34,7 +32,7 @@ import dev.vela.core.ViewNode;
  * @since 1.0
  */
 public final class CounterScreen extends VelaComponent {
-    private final MutableState<Integer> count = state(0);
+    private final MutableState<Integer> count = state("count", 0);
 
     /**
      * Returns the current count value.
@@ -67,9 +65,9 @@ public final class CounterScreen extends VelaComponent {
      */
     @Override
     public ViewNode render() {
-        return VelaColumn.of(
-                VelaText.of("Counter"),
-                VelaText.of("Current value: " + count.get()),
-                VelaButton.of("Increment", this::increment));
+        return column(
+                text("Counter"),
+                text("Current value: " + count.get()),
+                button("Increment", this::increment));
     }
 }

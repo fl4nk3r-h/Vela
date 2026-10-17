@@ -1,0 +1,8 @@
+plugins { id 'java-library' }
+java { withSourcesJar() }
+dependencies {
+    api project(':vela-core')
+    implementation 'org.yaml:snakeyaml:2.4'
+    testImplementation libs.junit.jupiter
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}

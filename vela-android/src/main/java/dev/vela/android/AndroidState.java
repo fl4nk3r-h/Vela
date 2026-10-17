@@ -18,6 +18,9 @@ public final class AndroidState {
         Bundle result = new Bundle();
         result.putBundle("values", values);
         result.putBundle("children", children);
+        Bundle codecs = new Bundle();
+        snapshot.codecs().forEach(codecs::putString);
+        result.putBundle("codecs", codecs);
         return result;
     }
 
@@ -38,6 +41,12 @@ public final class AndroidState {
                 if (child != null) children.put(key, decode(child));
             }
         }
-        return new StateSnapshot(values, children);
+        Map<String, String> codecs = new LinkedHashMap<>();
+        Bundle savedCodecs = bundle.getBundle("codecs");
+        if (savedCodecs != null) for (String key : savedCodecs.keySet()) {
+            String codec = savedCodecs.getString(key);
+            if (codec != null) codecs.put(key, codec);
+        }
+        return new StateSnapshot(values, children, codecs);
     }
 }

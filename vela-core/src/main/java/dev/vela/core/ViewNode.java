@@ -65,6 +65,13 @@ public final class ViewNode {
         return key;
     }
 
+    /** Return a modified copy without changing this description or dropping callbacks. */
+    public ViewNode with(Modifier modifier) {
+        Map<String, String> merged = new LinkedHashMap<>(props);
+        merged.putAll(Objects.requireNonNull(modifier, "modifier").properties());
+        return new ViewNode(type, key, text, merged, children, eventHandlers, lazyContent);
+    }
+
     public ViewNode withKey(String key) {
         return new ViewNode(
                 type,

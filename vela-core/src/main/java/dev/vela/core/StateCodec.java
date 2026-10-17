@@ -22,4 +22,14 @@ public record StateCodec<T>(Function<T, String> encode, Function<String, T> deco
         Objects.requireNonNull(encode, "encode");
         Objects.requireNonNull(decode, "decode");
     }
+
+    /** Stable identifiers for built-in codecs; custom formats use an explicit identifier. */
+    public String identifier() {
+        if (this == STRING) return "string:1";
+        if (this == INTEGER) return "integer:1";
+        if (this == LONG) return "long:1";
+        if (this == DOUBLE) return "double:1";
+        if (this == BOOLEAN) return "boolean:1";
+        return "custom";
+    }
 }

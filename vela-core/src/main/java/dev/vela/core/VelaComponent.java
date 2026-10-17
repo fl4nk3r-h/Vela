@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
+import dev.vela.resources.ResourceResolver;
 
 public abstract class VelaComponent {
     private final StateManager stateManager = new StateManager(this::notifyStateChanged);
@@ -18,15 +20,37 @@ public abstract class VelaComponent {
     private Map<String, StateSnapshot> restoredChildren = new LinkedHashMap<>();
     private Set<String> renderingChildren;
     private ViewNode cached;
+    private ResourceResolver resourceResolver = ResourceResolver.empty();
+    private Consumer<String> restoreDiagnostic;
 
     protected final <T> MutableState<T> state(T initialValue) {
         return new MutableState<>(initialValue, this::markDirty, this::checkStateThread);
     }
 
+    protected final MutableState<String> state(String key, String value) { return saveableState(key, value, StateCodec.STRING); }
+    protected final MutableState<Integer> state(String key, int value) { return saveableState(key, value, StateCodec.INTEGER); }
+    protected final MutableState<Long> state(String key, long value) { return saveableState(key, value, StateCodec.LONG); }
+    protected final MutableState<Double> state(String key, double value) {
+        if (!Double.isFinite(value)) throw new IllegalArgumentException("State must be finite");
+        return saveableState(key, value, StateCodec.DOUBLE);
+    }
+    protected final MutableState<Boolean> state(String key, boolean value) { return saveableState(key, value, StateCodec.BOOLEAN); }
+
+    protected final ResourceResolver resources() { return resourceResolver; }
+
+    final void resourceResolver(ResourceResolver resolver) {
+        resourceResolver = Objects.requireNonNull(resolver, "resolver");
+        children.values().forEach(child -> child.resourceResolver(resolver));
+    }
+
     protected final <T> MutableState<T> saveableState(String key, T initialValue, StateCodec<T> codec) {
+        return saveableState(key, initialValue, codec, codec.identifier());
+    }
+
+    protected final <T> MutableState<T> saveableState(String key, T initialValue, StateCodec<T> codec, String formatId) {
         requireKey(key);
         MutableState<T> state = state(Objects.requireNonNull(initialValue, "initialValue"));
-        if (saveable.putIfAbsent(key, new SavedValue<>(state, Objects.requireNonNull(codec, "codec"))) != null) {
+        if (saveable.putIfAbsent(key, new SavedValue<>(state, Objects.requireNonNull(codec, "codec"), Objects.requireNonNull(formatId, "formatId"))) != null) {
             throw new IllegalArgumentException("Duplicate saveable state key: " + key);
         }
         return state;
@@ -51,8 +75,10 @@ public abstract class VelaComponent {
             // Attach first: a component already owned elsewhere must not be torn down here.
             component.attachRuntime(this::notifyStateChanged, runtimeThread);
             children.put(key, component);
+            component.resourceResolver(resourceResolver);
+            component.restoreDiagnostic = restoreDiagnostic;
             StateSnapshot restored = restoredChildren.remove(key);
-            if (restored != null) component.restoreState(restored);
+            if (restored != null) component.restoreState(restored, restoreDiagnostic);
             component.onMount();
         }
         return ViewNode.builder("component").key(key).child(component.renderManaged(true)).build();
@@ -72,20 +98,38 @@ public abstract class VelaComponent {
         saveable.forEach((key, value) -> values.put(key, value.encode()));
         Map<String, StateSnapshot> snapshots = new LinkedHashMap<>(restoredChildren);
         children.forEach((key, value) -> snapshots.put(key, value.saveState()));
-        return new StateSnapshot(values, snapshots);
+        Map<String, String> codecs = new LinkedHashMap<>();
+        saveable.forEach((key, value) -> codecs.put(key, value.formatId()));
+        return new StateSnapshot(values, snapshots, codecs);
     }
 
     public final void restoreState(StateSnapshot snapshot) {
+        restoreState(snapshot, null);
+    }
+
+    /** Reload restoration is tolerant and reports keys, never saved values. */
+    public final void restoreState(StateSnapshot snapshot, Consumer<String> diagnostic) {
         checkStateThread();
         Objects.requireNonNull(snapshot, "snapshot");
+        restoreDiagnostic = diagnostic;
         snapshot.values().forEach((key, value) -> {
             SavedValue<?> entry = saveable.get(key);
-            if (entry != null) entry.restore(value);
+            if (entry == null) return;
+            String previous = snapshot.codecs().get(key);
+            if (previous != null && !previous.equals(entry.formatId())) {
+                if (diagnostic != null) diagnostic.accept("Reset incompatible state: " + key);
+                return;
+            }
+            try { entry.restore(value); }
+            catch (RuntimeException failure) {
+                if (diagnostic == null) throw failure;
+                diagnostic.accept("Reset undecodable state: " + key);
+            }
         });
         restoredChildren = new LinkedHashMap<>(snapshot.children());
         children.forEach((key, value) -> {
             StateSnapshot saved = restoredChildren.remove(key);
-            if (saved != null) value.restoreState(saved);
+            if (saved != null) value.restoreState(saved, diagnostic);
         });
         markDirty();
     }
@@ -206,7 +250,7 @@ public abstract class VelaComponent {
         if (failure instanceof Error error) throw error;
     }
 
-    private record SavedValue<T>(MutableState<T> state, StateCodec<T> codec) {
+    private record SavedValue<T>(MutableState<T> state, StateCodec<T> codec, String formatId) {
         String encode() { return Objects.requireNonNull(codec.encode().apply(state.get()), "encoded state"); }
         void restore(String value) { state.set(Objects.requireNonNull(codec.decode().apply(value), "restored state")); }
     }

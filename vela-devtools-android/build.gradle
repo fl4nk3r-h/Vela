@@ -1,0 +1,18 @@
+plugins { id 'com.android.library' version '8.13.2' }
+android {
+    namespace = 'dev.vela.devtools'
+    compileSdk = 35
+    defaultConfig { minSdk = 26; testInstrumentationRunner = 'android.test.InstrumentationTestRunner' }
+    compileOptions {
+        coreLibraryDesugaringEnabled = true
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    useLibrary 'android.test.runner'
+    useLibrary 'android.test.base'
+}
+dependencies {
+    implementation project(':vela-android')
+    implementation project(':vela-dev-protocol')
+    coreLibraryDesugaring libs.desugar.jdk
+}

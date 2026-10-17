@@ -36,7 +36,7 @@ JVM regression tests and Android instrumented conformance tests are checked in. 
 | --- | --- | --- |
 | Typed schema | Typed property keys and shared validation; legacy `props()` uses string wire values | A complete per-node schema and generated backend contracts |
 | Collection identity | Lazy adapters use stable keys; eager nodes use keyed reconciliation | More collection-level diagnostics and stable data-diff updates |
-| Styling | Native basic styles and public modifier support | Rich themes, animation, spans, advanced typography, and visual regression coverage |
+| Styling | Native basic styles, modifiers, and YAML-backed named styles/themes | Theme inheritance, animation, spans, advanced typography, and visual regression coverage |
 | Accessibility | Native controls, descriptions, roles, keyboard/accessibility activation tests | Broader assistive technology/device coverage and richer collection announcements |
 | Icons | Small native glyph mapping | Pluggable icon packs and vector resources |
 | Snackbar | Application-controlled inline status/action | Optional timed overlay behavior |
@@ -53,7 +53,8 @@ JVM regression tests and Android instrumented conformance tests are checked in. 
 - The project is experimental and has no stable API guarantee yet. Public API changes must be documented and covered by regression tests.
 - Native adapters and new composition APIs need broader application examples and device coverage.
 - Operation-count tests and lazy-materialization tests provide regression bounds; frame-time/allocation benchmarks and performance tracing remain future work.
-- Maven publication, signed releases, and an external compatibility policy are not configured.
+- Local Maven publication and CLI archives with matching framework artifacts are configured. Public signed releases and an external compatibility policy remain future work.
+- The [developer workflow](developer-workflow.md) provides measured editing/reload checks. Broader application benchmarks and platform-specific installer coverage should grow alongside adoption.
 - CI workflow execution on GitHub follows normal repository push/PR operations; adding the workflow locally does not establish a remote green run.
 
 ## Suggested Next Milestones

@@ -1,6 +1,7 @@
 package dev.vela.core;
 
 import java.util.Objects;
+import dev.vela.resources.ResourceResolver;
 
 public final class VelaRuntime<H> implements AutoCloseable {
     private final VelaComponent component;
@@ -19,6 +20,18 @@ public final class VelaRuntime<H> implements AutoCloseable {
         this.component = Objects.requireNonNull(component, "component");
         tree = new MountedTree<>(backend);
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
+    }
+
+    public VelaRuntime(VelaComponent component, RendererBackend<H> backend, FrameScheduler scheduler,
+                       ResourceResolver resources) {
+        this(component, backend, scheduler);
+        component.resourceResolver(resources);
+    }
+
+    public void updateResources(ResourceResolver resources) {
+        checkMounted();
+        component.resourceResolver(resources);
+        requestRender();
     }
 
     public void mount() {

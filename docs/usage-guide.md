@@ -38,7 +38,7 @@ dependencies {
 }
 ```
 
-Enable compile-time validation for `@State` by adding the compiler module as an annotation processor:
+Optionally enable compile-time validation for `@State` by adding the compiler module as an annotation processor. It is unnecessary for ordinary observable state or the [concise API and generated projects](developer-workflow.md):
 
 ```gradle
 dependencies {

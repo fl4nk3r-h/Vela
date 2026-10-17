@@ -1,0 +1,12 @@
+plugins { id 'groovy'; id 'java-gradle-plugin'; id 'maven-publish' }
+dependencies {
+    implementation project(':vela-tooling')
+    testImplementation gradleTestKit()
+    testImplementation libs.junit.jupiter
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+gradlePlugin {
+    plugins {
+        vela { id = 'dev.vela.android'; implementationClass = 'dev.vela.gradle.VelaPlugin' }
+    }
+}

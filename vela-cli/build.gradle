@@ -1,0 +1,51 @@
+plugins { id 'application' }
+dependencies {
+    implementation project(':vela-tooling')
+    implementation project(':vela-dev-protocol')
+    testImplementation libs.junit.jupiter
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+application { mainClass = 'dev.vela.cli.Vela'; applicationName = 'vela' }
+distributions.main.contents {
+    from(rootProject.layout.buildDirectory.dir('repository')) { into 'repository' }
+}
+tasks.named('installDist') { dependsOn rootProject.tasks.named('stageVelaArtifacts') }
+tasks.named('distZip') { dependsOn rootProject.tasks.named('stageVelaArtifacts') }
+tasks.named('distTar') { dependsOn rootProject.tasks.named('stageVelaArtifacts') }
+tasks.named('processResources') {
+    from(rootProject.projectDir) {
+        include 'gradlew', 'gradlew.bat', 'gradle/wrapper/gradle-wrapper.jar', 'gradle/wrapper/gradle-wrapper.properties'
+        into 'bootstrap'
+    }
+}
+
+def jdk = javaToolchains.launcherFor {
+    languageVersion = JavaLanguageVersion.of(providers.gradleProperty('velaJavaVersion').getOrElse('25').toInteger())
+}
+tasks.register('runtimeImage', Exec) {
+    inputs.property('jdk', jdk.map { it.metadata.languageVersion.asInt() })
+    outputs.dir(layout.buildDirectory.dir('runtime'))
+    doFirst {
+        delete layout.buildDirectory.dir('runtime')
+        def jlinkName = System.getProperty('os.name').toLowerCase().contains('win') ? 'bin/jlink.exe' : 'bin/jlink'
+        commandLine jdk.get().metadata.installationPath.file(jlinkName).asFile,
+            '--add-modules', 'java.base,java.compiler,java.net.http,java.logging,java.xml,jdk.crypto.ec',
+            '--strip-debug', '--no-header-files', '--no-man-pages', '--compress=2',
+            '--output', layout.buildDirectory.dir('runtime').get().asFile
+    }
+}
+def platform = System.getProperty('os.name').toLowerCase().contains('win') ? 'windows' : System.getProperty('os.name').toLowerCase().contains('mac') ? 'mac' : 'linux'
+def arch = System.getProperty('os.arch') in ['aarch64', 'arm64'] ? 'aarch64' : 'x64'
+tasks.register('runtimeDist', Zip) {
+    dependsOn tasks.named('installDist'), tasks.named('runtimeImage')
+    archiveFileName = "vela-${project.version}-${platform}-${arch}.zip"
+    destinationDirectory = layout.buildDirectory.dir('distributions')
+    into('vela') {
+        from(tasks.named('installDist').map { it.destinationDir }) { exclude 'bin/**' }
+        from(layout.buildDirectory.dir('runtime')) { into 'runtime' }
+        from('src/distribution')
+    }
+    filesMatching(['**/bin/*', '**/lib/jspawnhelper']) {
+        filePermissions { unix('rwxr-xr-x') }
+    }
+}

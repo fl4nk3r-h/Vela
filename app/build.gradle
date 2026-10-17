@@ -4,13 +4,12 @@ plugins {
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(providers.gradleProperty('velaJavaVersion').getOrElse('25').toInteger())
     }
 }
 
 dependencies {
     implementation project(':vela-core')
-    annotationProcessor project(':vela-compiler')
 
     testImplementation libs.junit.jupiter
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

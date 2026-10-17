@@ -18,6 +18,9 @@ import javax.tools.ToolProvider;
 import org.junit.jupiter.api.Test;
 
 class StateProcessorTest {
+    @Test void supportsTheRunningCompilerVersion() {
+        org.junit.jupiter.api.Assertions.assertEquals(javax.lang.model.SourceVersion.latestSupported(), new StateProcessor().getSupportedSourceVersion());
+    }
     @Test
     void acceptsMutableStateOnAVelaComponent() {
         CompilationResult result = compile("example.ValidComponent", """

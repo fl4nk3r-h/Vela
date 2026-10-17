@@ -4,15 +4,19 @@ Latin for "sail" — giving Java devs the wind to move fast on UI without switch
 
 ## Introduction
 
-Vela is a Java 21 workspace with a reusable UI runtime, annotation processor, console demo, and installable Android showcase.
+Vela is a Java-first UI framework with a reusable runtime, native Android backend, concise component API, YAML resources, project CLI, and state-preserving development reload. JDK 25 is the default toolchain; shared core and Android bytecode target Java 17, with JVM compatibility tested on Java 21 and 25.
 
 ## Modules
 
 - `vela-core` contains observable state, a mounted runtime, keyed renderer reconciliation, immutable modifiers and typography, payload-aware UI events, and a broad component catalog.
-- `vela-compiler` contains the annotation processor used to validate `@State` usage during compilation.
+- `vela-compiler` contains optional compile-time validation for `@State`; ordinary applications need no annotation processing.
 - `vela-android` contains the reusable retained Android backend, frame scheduler, image loader, and Bundle state adapter.
 - `app` contains the demo application and the first real screen component, `CounterScreen`.
 - `showcase-android` contains Daymark, a native Android application consuming `vela-android`.
+- `vela-tooling` compiles YAML resources into typed Java accessors, binary catalogs, and Android resources.
+- `vela-gradle-plugin` supplies generated application bootstrap, cached resource tasks, and reload DEX compilation.
+- `vela-cli` creates projects, manages toolchains, checks prerequisites, builds, and watches edits.
+- `vela-devtools-android` and `vela-dev-protocol` provide the debug-only reload connection.
 
 ## Project Structure
 
@@ -51,9 +55,24 @@ The [runtime guide](docs/runtime-guide.md) documents observable state, deferred 
 
 ## Requirements
 
-- Java 21 or newer
+- The CLI runtime archive needs no separately installed Java or Gradle. `vela setup` manages JDK 25 and the Android SDK.
+- Framework contributors: JDK 25 by default, or JDK 21 with `-PvelaJavaVersion=21`
 - A shell that can run the Gradle wrapper
 - Android SDK 35 for the optional Daymark showcase
+
+## Create an application
+
+Build the CLI archive with `./gradlew -Pandroid=true :vela-cli:runtimeDist`, unpack the archive from `vela-cli/build/distributions/`, and add its `vela/bin` directory to PATH.
+
+```sh
+vela init my-app --package com.example.myapp
+cd my-app
+vela setup
+vela doctor
+vela dev
+```
+
+The starter uses one Java screen and YAML values. Its manifest, theme, Activity lifecycle, state restoration, and build setup are supplied automatically. `vela setup --emulator` installs an optional emulator; Android Studio is optional. See the [developer workflow](docs/developer-workflow.md) for requirements, resource syntax, concise APIs, managed installation, reload boundaries, and testing.
 
 ## Getting Started
 

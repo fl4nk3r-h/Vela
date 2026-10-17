@@ -6,13 +6,18 @@ This file is the working agreement for agents contributing to Vela. Read it befo
 
 ## Repository Context
 
-Vela is a Java 21 Gradle workspace for experimenting with a small component and rendering model.
+Vela is a Java 25 Gradle workspace with Java 17 shared runtime bytecode and Java 21/25 JVM compatibility checks.
 
 | Module | Owns | Does not own |
 | --- | --- | --- |
 | `vela-core` | Runtime components, state tracking, view nodes, and rendering | Annotation-processing rules or demo-only behavior |
 | `vela-compiler` | Compile-time validation for `@State` | Runtime state management or rendering |
 | `app` | Executable demo and integration examples | Shared framework APIs |
+| `vela-android` | Native rendering and Activity lifecycle host | Build-time YAML parsing or debug code loading |
+| `vela-tooling` | YAML validation, resource generation, and application configuration | Android runtime dependencies |
+| `vela-gradle-plugin` | Cacheable generation, application bootstrap, and reload compilation | Application screen logic |
+| `vela-cli` | Project creation, managed setup, build commands, and development watcher | Renderer implementation |
+| `vela-devtools-android`, `vela-dev-protocol` | Debug reload transport and code loading | Release application dependencies |
 
 Keep changes in the narrowest module that owns the behavior. Update tests with behavior changes and keep public API changes explicit in the documentation.
 

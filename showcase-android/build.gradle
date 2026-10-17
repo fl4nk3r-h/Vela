@@ -27,5 +27,4 @@ android {
 dependencies {
     implementation project(':vela-android')
     coreLibraryDesugaring libs.desugar.jdk
-    annotationProcessor project(':vela-compiler')
 }
