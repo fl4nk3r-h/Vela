@@ -29,3 +29,4 @@ gradle-app.setting
 
 # Class Files
 *.class
+__pycache__/

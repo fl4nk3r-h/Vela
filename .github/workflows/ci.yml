@@ -11,15 +11,18 @@ jobs:
   jvm:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      matrix:
+        java: [21, 25]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: ${{ matrix.java }}
           cache: gradle
       - name: JVM tests and demo without Android
-        run: ./gradlew -Pandroid=false test :app:run --no-daemon --no-configuration-cache
+        run: ./gradlew -Pandroid=false -PvelaJavaVersion=${{ matrix.java }} test :app:run --no-daemon --no-configuration-cache
 
   android:
     runs-on: ubuntu-latest
@@ -33,7 +36,7 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
           cache: gradle
       - name: Enable KVM
         run: |
@@ -48,4 +51,49 @@ jobs:
           disable-animations: true
           script: |
             sdkmanager "platforms;android-35" "build-tools;35.0.0"
-            ./gradlew -Pandroid=true :vela-android:connectedDebugAndroidTest :showcase-android:connectedDebugAndroidTest :vela-android:lintDebug :showcase-android:lintDebug :showcase-android:assembleDebug --no-daemon --no-configuration-cache
+            ./gradlew -Pandroid=true :vela-android:connectedDebugAndroidTest :showcase-android:connectedDebugAndroidTest :vela-android:lintDebug :vela-devtools-android:lintDebug :showcase-android:lintDebug :showcase-android:assembleDebug :vela-cli:installDist --no-daemon --no-configuration-cache
+            python3 tools/verify_dev_workflow.py --cli vela-cli/build/install/vela/bin/vela --work-dir "$RUNNER_TEMP/vela-workflow" --device emulator-5554
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-results-${{ matrix.api }}
+          path: |
+            **/build/reports/androidTests/
+            **/build/reports/lint-results-debug.*
+            ${{ runner.temp }}/vela-workflow/dev.log
+            ${{ runner.temp }}/vela-workflow/results.json
+      - uses: actions/upload-artifact@v4
+        if: matrix.api == 35
+        with:
+          name: framework-repository
+          path: build/repository/
+
+  distribution:
+    needs: android
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+      - uses: actions/download-artifact@v4
+        with:
+          name: framework-repository
+          path: build/repository/
+      - name: Build platform runtime archive and test portable tooling
+        run: ./gradlew -Pandroid=false test :vela-cli:runtimeDist --no-daemon --no-configuration-cache
+      - name: Verify archive without system Java
+        run: python tools/verify_distribution.py --archive "$(find vela-cli/build/distributions -name 'vela-0.1.0-*.zip' | head -1)" --work-dir "$RUNNER_TEMP/vela-archive-test"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vela-${{ matrix.os }}
+          path: vela-cli/build/distributions/vela-0.1.0-*.zip
