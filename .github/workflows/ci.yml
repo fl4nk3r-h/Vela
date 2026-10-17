@@ -53,6 +53,7 @@ jobs:
             sdkmanager "platforms;android-35" "build-tools;35.0.0"
             ./gradlew -Pandroid=true :vela-android:connectedDebugAndroidTest :showcase-android:connectedDebugAndroidTest :vela-android:lintDebug :vela-devtools-android:lintDebug :showcase-android:lintDebug :showcase-android:assembleDebug :vela-cli:installDist --no-daemon --no-configuration-cache
             python3 tools/verify_dev_workflow.py --cli vela-cli/build/install/vela/bin/vela --work-dir "$RUNNER_TEMP/vela-workflow" --device emulator-5554
+            python3 tools/benchmark_builds.py --project "$RUNNER_TEMP/vela-workflow/project with spaces" --cli vela-cli/build/install/vela/bin/vela --device emulator-5554 --output "$RUNNER_TEMP/vela-workflow/build-times.json"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -62,6 +63,7 @@ jobs:
             **/build/reports/lint-results-debug.*
             ${{ runner.temp }}/vela-workflow/dev.log
             ${{ runner.temp }}/vela-workflow/results.json
+            ${{ runner.temp }}/vela-workflow/build-times.*
       - uses: actions/upload-artifact@v4
         if: matrix.api == 35
         with:

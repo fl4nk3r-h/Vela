@@ -83,6 +83,7 @@ public final class ResourceCompiler {
 
     private Map<String, String> resolve(YamlDocument yaml, Map<String, String> fallback) {
         Map<String, String> all = new TreeMap<>(fallback); all.putAll(yaml.values());
+        Map<String, String> memo = new HashMap<>();
         Map<String, String> resolved = new TreeMap<>();
         for (String key : yaml.values().keySet()) {
             String[] parts = key.split("\\.");
@@ -92,7 +93,7 @@ public final class ResourceCompiler {
             boolean style = parts[0].equals("styles") || parts[0].equals("themes");
             if (!style && parts.length != 2) throw yaml.error(key, "Resource values must be scalars");
             if (style && parts.length < 3) throw yaml.error(key, "Styles and themes must contain properties");
-            String value = reference(key, all, new HashSet<>(), yaml);
+            String value = reference(key, all, new HashSet<>(), memo, yaml);
             if (parts[0].equals("colors") && !value.matches("#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?")) throw yaml.error(key, "Use a quoted #RRGGBB or #AARRGGBB color");
             if (parts[0].equals("dimensions") && !value.matches("[0-9]+(?:dp|sp)")) throw yaml.error(key, "Dimensions must be nonnegative integer dp or sp values");
             if (parts[0].equals("dimensions")) try { Integer.parseInt(value.substring(0, value.length() - 2)); }
@@ -129,12 +130,14 @@ public final class ResourceCompiler {
         }
     }
 
-    private String reference(String key, Map<String, String> values, Set<String> visiting, YamlDocument yaml) {
+    private String reference(String key, Map<String, String> values, Set<String> visiting, Map<String, String> memo, YamlDocument yaml) {
+        if (memo.containsKey(key)) return memo.get(key);
+        if (visiting.size() >= 256) throw yaml.error(key, "Resource reference chain exceeds 256 entries");
         if (!visiting.add(key)) throw yaml.error(key, "Resource reference cycle: " + key);
         String value = values.get(key);
         if (value == null) throw yaml.error(key, "Missing resource reference: " + key);
-        if (value.startsWith("@")) value = reference(value.substring(1), values, visiting, yaml);
-        visiting.remove(key); return value;
+        if (value.startsWith("@")) value = reference(value.substring(1), values, visiting, memo, yaml);
+        visiting.remove(key); memo.put(key, value); return value;
     }
 
     private static Map<Integer, String> parameters(String value) {

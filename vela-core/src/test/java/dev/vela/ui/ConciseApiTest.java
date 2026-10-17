@@ -53,6 +53,19 @@ class ConciseApiTest {
         assertFalse(button("Go", () -> fail("disabled"), options).dispatch("click"));
         assertThrows(IllegalArgumentException.class, () -> SliderOptions.defaults().range(2, 1));
     }
+    @Test void rejectedSecondRuntimeCannotReplaceTheMountedResourceEnvironment() {
+        var component = new VelaComponent() { public ViewNode render() { return text(resources().string("title")); } };
+        Deque<Runnable> queue = new ArrayDeque<>();
+        try (var first = new VelaRuntime<>(component, new TextRendererBackend(), queue::addLast, resolver("First"))) {
+            first.mount();
+            try (var second = new VelaRuntime<>(component, new TextRendererBackend(), queue::addLast, resolver("Second"))) {
+                assertEquals("First", component.render().text());
+                assertThrows(IllegalStateException.class, second::mount);
+                assertEquals("First", component.render().text());
+            }
+            first.requestRender(); first.flush(); assertEquals("First", component.render().text());
+        }
+    }
     private static ResourceResolver resolver(String title) {
         return new ResourceResolver(new ResourceCatalog(Map.of("", Map.of("strings.title", title))), Locale.ENGLISH, "default");
     }

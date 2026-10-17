@@ -81,4 +81,11 @@ class ResourceCompilerTest {
         assertThrows(java.io.IOException.class, () -> ResourceCatalog.decode(Arrays.copyOf(bytes, 5)));
         assertThrows(java.io.IOException.class, () -> ResourceCatalog.decode(Arrays.copyOf(bytes, bytes.length + 1)));
     }
+    @Test void excessiveReferenceChainsProduceDiagnosticsInsteadOfStackOverflow() throws Exception {
+        StringBuilder yaml = new StringBuilder("strings:\n");
+        for (int i = 0; i < 300; i++) yaml.append("  a").append(String.format("%03d", i)).append(": '@strings.a").append(String.format("%03d", i + 1)).append("'\n");
+        yaml.append("  a300: End\n"); Files.writeString(directory.resolve("values.yaml"), yaml);
+        var error = assertThrows(IllegalArgumentException.class, () -> compiler.compile(directory, "example.app"));
+        assertTrue(error.getMessage().contains("reference chain exceeds"));
+    }
 }

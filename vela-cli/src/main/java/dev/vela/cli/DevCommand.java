@@ -49,6 +49,9 @@ final class DevCommand {
     }
     private void update(Set<Path> changed) throws Exception {
         if (changed.stream().anyMatch(this::restartRequired)) { restart("Build configuration or packaged platform resource changed", true); return; }
+        if (changed.stream().anyMatch(p -> p.toString().endsWith(".yaml")) && usesNativeResources()) {
+            restart("YAML values are also consumed through native Android resource IDs", true); return;
+        }
         boolean javaChanged = changed.stream().anyMatch(p -> p.toString().endsWith(".java"));
         if (changed.stream().anyMatch(p -> p.toString().endsWith(".yaml"))) {
             Path generated = project.resolve("build/generated/vela/resources/java/" + config.packageName().replace('.', '/') + "/Values.java");
@@ -81,27 +84,40 @@ final class DevCommand {
     }
     private void restart(String reason, boolean checkpoint) throws Exception {
         System.out.println("Vela restart: " + reason);
-        if (checkpoint && adb != null) try {
+        ProjectConfig next = ProjectConfig.read(project);
+        if (gradle("assembleDebug") != 0) throw new IOException("Build failed");
+        if (checkpoint && adb != null && config.packageName().equals(next.packageName())) try {
             var response = adb.request(new ReloadProtocol.Request(ReloadProtocol.Operation.CHECKPOINT, "", new byte[0], new byte[0]));
             if (!response.success()) System.err.println("State checkpoint unavailable: " + response.message());
         } catch (Exception error) { System.err.println("Device unavailable for checkpoint; reconnect and save again: " + error.getMessage()); }
-        config = ProjectConfig.read(project);
-        if (gradle("assembleDebug") != 0) throw new IOException("Build failed");
+        config = next;
         adb = new AdbClient(tools, project, AdbClient.device(tools, project, serial), config.packageName(), token);
         adb.installAndLaunch(); adb.awaitReady();
     }
     private int gradle(String task) throws Exception { return Vela.gradle(project, tools, task); }
     private static boolean ignored(Path path) {
-        for (Path part : path) if (Set.of(".git", ".gradle", ".vela", "build", "bin", ".idea").contains(part.toString())) return true;
+        boolean source = false;
+        for (Path part : path) {
+            String name = part.toString();
+            if (name.equals("src")) source = true;
+            if (Set.of(".git", ".gradle", ".vela", ".idea").contains(name)
+                    || (!source && Set.of("build", "bin").contains(name))) return true;
+        }
         return false;
     }
     private void register(Path directory, WatchService watcher, Map<WatchKey, Path> keys) throws IOException {
-        try (var files = Files.walk(directory)) {
-            for (Path path : files.filter(Files::isDirectory).filter(p -> !ignored(project.relativize(p))).toList()) {
+        Files.walkFileTree(directory, new SimpleFileVisitor<>() {
+            @Override public FileVisitResult preVisitDirectory(Path path, java.nio.file.attribute.BasicFileAttributes attributes) throws IOException {
+                if (ignored(project.relativize(path))) return FileVisitResult.SKIP_SUBTREE;
                 WatchKey key = path.register(watcher, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_DELETE, StandardWatchEventKinds.ENTRY_MODIFY);
                 keys.put(key, path);
+                return FileVisitResult.CONTINUE;
             }
-        }
+            @Override public FileVisitResult visitFileFailed(Path path, IOException error) throws IOException {
+                if (error instanceof NoSuchFileException) return FileVisitResult.CONTINUE;
+                throw error;
+            }
+        });
     }
     private void collect(WatchKey key, Map<WatchKey, Path> keys, WatchService watcher, Set<Path> changed) throws IOException {
         Path directory = keys.get(key);
@@ -109,20 +125,40 @@ final class DevCommand {
             if (event.kind() == StandardWatchEventKinds.OVERFLOW) continue;
             Path path = directory.resolve((Path) event.context());
             if (ignored(project.relativize(path))) continue;
-            if (event.kind() == StandardWatchEventKinds.ENTRY_CREATE && Files.isDirectory(path)) register(path, watcher, keys);
+            if (event.kind() == StandardWatchEventKinds.ENTRY_CREATE && Files.isDirectory(path)) {
+                try { register(path, watcher, keys); } catch (NoSuchFileException ignored) { }
+            }
             changed.add(project.relativize(path));
         }
         if (!key.reset()) keys.remove(key);
     }
     private Map<Path, String> snapshot() throws IOException {
         Map<Path, String> result = new HashMap<>();
-        try (var files = Files.walk(project)) {
-            for (Path file : files.filter(Files::isRegularFile).filter(p -> !ignored(project.relativize(p))).toList()) {
+        Files.walkFileTree(project, new SimpleFileVisitor<>() {
+            @Override public FileVisitResult preVisitDirectory(Path path, java.nio.file.attribute.BasicFileAttributes attributes) {
+                return ignored(project.relativize(path)) ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
+            }
+            @Override public FileVisitResult visitFile(Path file, java.nio.file.attribute.BasicFileAttributes attributes) throws IOException {
                 String name = file.getFileName().toString();
-                if (name.endsWith(".java") || name.endsWith(".yaml") || name.endsWith(".xml") || name.endsWith(".gradle") || name.endsWith(".gradle.kts") || name.endsWith(".toml") || name.endsWith(".properties") || name.endsWith(".jar") || name.endsWith(".so") || name.startsWith("gradlew") || project.relativize(file).startsWith("src"))
-                    result.put(project.relativize(file), VerifiedDownload.digest(file));
+                if (name.endsWith("~") || name.endsWith(".swp") || name.endsWith(".swo") || name.endsWith(".tmp")) return FileVisitResult.CONTINUE;
+                if (attributes.isRegularFile() && (name.endsWith(".java") || name.endsWith(".yaml") || name.endsWith(".xml") || name.endsWith(".gradle") || name.endsWith(".gradle.kts") || name.endsWith(".toml") || name.endsWith(".properties") || name.endsWith(".jar") || name.endsWith(".so") || name.startsWith("gradlew") || project.relativize(file).startsWith("src")))
+                    try { result.put(project.relativize(file), VerifiedDownload.digest(file)); } catch (NoSuchFileException ignored) { }
+                return FileVisitResult.CONTINUE;
+            }
+            @Override public FileVisitResult visitFileFailed(Path path, IOException error) throws IOException {
+                if (error instanceof NoSuchFileException) return FileVisitResult.CONTINUE;
+                throw error;
+            }
+        });
+        return result;
+    }
+    private boolean usesNativeResources() throws IOException {
+        Path directory = project.resolve("src/main/java");
+        try (var files = Files.walk(directory)) {
+            for (Path file : files.filter(p -> p.toString().endsWith(".java")).toList()) {
+                if (java.util.regex.Pattern.compile("\\bR\\s*\\.|\\bgetIdentifier\\s*\\(").matcher(Files.readString(file)).find()) return true;
             }
         }
-        return result;
+        return false;
     }
 }

@@ -1,4 +1,38 @@
 plugins { id 'application' }
+
+abstract class CreateRuntimeImage extends DefaultTask {
+    @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getJlinkExecutable()
+    @InputFiles @PathSensitive(PathSensitivity.RELATIVE) abstract ConfigurableFileCollection getModuleInputs()
+    @Input abstract Property<String> getRuntimeVersion()
+    @Input abstract Property<Integer> getMajorVersion()
+    @OutputDirectory abstract DirectoryProperty getOutputDirectory()
+    @javax.inject.Inject abstract org.gradle.process.ExecOperations getExecOperations()
+    @javax.inject.Inject abstract FileSystemOperations getFileSystemOperations()
+
+    @TaskAction void createRuntime() {
+        if (majorVersion.get() != 25) throw new GradleException('Build runtime archives with JDK 25; use the default velaJavaVersion=25')
+        def output = outputDirectory.get().asFile
+        fileSystemOperations.delete { spec -> spec.delete(output) }
+        def arguments = [jlinkExecutable.get().asFile.absolutePath, '--add-modules',
+            'java.base,java.compiler,java.net.http,java.logging,java.xml,jdk.crypto.ec',
+            '--strip-debug', '--no-header-files', '--no-man-pages', '--compress=zip-6', '--output', output.absolutePath]
+        execOperations.exec { spec -> spec.commandLine(arguments) }.assertNormalExitValue()
+    }
+}
+
+abstract class CheckDistributionArtifacts extends DefaultTask {
+    @InputDirectory @PathSensitive(PathSensitivity.RELATIVE) abstract DirectoryProperty getRepositoryDirectory()
+    @Input abstract Property<String> getFrameworkVersion()
+    @TaskAction void verifyArtifacts() {
+        def repository = repositoryDirectory.get().asFile
+        def version = frameworkVersion.get()
+        ['vela-core': 'jar', 'vela-tooling': 'jar', 'vela-gradle-plugin': 'jar',
+         'vela-dev-protocol': 'jar', 'vela-android': 'aar', 'vela-devtools-android': 'aar'].each { name, extension ->
+            def artifact = new File(repository, "dev/vela/${name}/${version}/${name}-${version}.${extension}")
+            if (!artifact.isFile()) throw new GradleException("Missing ${artifact.name}. Build with -Pandroid=true and an Android SDK, or supply a complete staged framework repository.")
+        }
+    }
+}
 dependencies {
     implementation project(':vela-tooling')
     implementation project(':vela-dev-protocol')
@@ -9,9 +43,14 @@ application { mainClass = 'dev.vela.cli.Vela'; applicationName = 'vela' }
 distributions.main.contents {
     from(rootProject.layout.buildDirectory.dir('repository')) { into 'repository' }
 }
-tasks.named('installDist') { dependsOn rootProject.tasks.named('stageVelaArtifacts') }
-tasks.named('distZip') { dependsOn rootProject.tasks.named('stageVelaArtifacts') }
-tasks.named('distTar') { dependsOn rootProject.tasks.named('stageVelaArtifacts') }
+def distributionArtifacts = tasks.register('checkDistributionArtifacts', CheckDistributionArtifacts) {
+    dependsOn rootProject.tasks.named('stageVelaArtifacts')
+    repositoryDirectory.set(rootProject.layout.buildDirectory.dir('repository'))
+    frameworkVersion.set(project.version.toString())
+}
+tasks.named('installDist') { dependsOn distributionArtifacts }
+tasks.named('distZip') { dependsOn distributionArtifacts }
+tasks.named('distTar') { dependsOn distributionArtifacts }
 tasks.named('processResources') {
     from(rootProject.projectDir) {
         include 'gradlew', 'gradlew.bat', 'gradle/wrapper/gradle-wrapper.jar', 'gradle/wrapper/gradle-wrapper.properties'
@@ -22,17 +61,14 @@ tasks.named('processResources') {
 def jdk = javaToolchains.launcherFor {
     languageVersion = JavaLanguageVersion.of(providers.gradleProperty('velaJavaVersion').getOrElse('25').toInteger())
 }
-tasks.register('runtimeImage', Exec) {
-    inputs.property('jdk', jdk.map { it.metadata.languageVersion.asInt() })
-    outputs.dir(layout.buildDirectory.dir('runtime'))
-    doFirst {
-        delete layout.buildDirectory.dir('runtime')
-        def jlinkName = System.getProperty('os.name').toLowerCase().contains('win') ? 'bin/jlink.exe' : 'bin/jlink'
-        commandLine jdk.get().metadata.installationPath.file(jlinkName).asFile,
-            '--add-modules', 'java.base,java.compiler,java.net.http,java.logging,java.xml,jdk.crypto.ec',
-            '--strip-debug', '--no-header-files', '--no-man-pages', '--compress=2',
-            '--output', layout.buildDirectory.dir('runtime').get().asFile
-    }
+tasks.register('runtimeImage', CreateRuntimeImage) {
+    def jlinkName = System.getProperty('os.name').toLowerCase().contains('win') ? 'bin/jlink.exe' : 'bin/jlink'
+    jlinkExecutable.set(jdk.map { it.metadata.installationPath.file(jlinkName) })
+    moduleInputs.from(jdk.map { it.metadata.installationPath.file('lib/modules') })
+    moduleInputs.from(jdk.map { it.metadata.installationPath.dir('jmods').asFileTree })
+    runtimeVersion.set(jdk.map { it.metadata.javaRuntimeVersion })
+    majorVersion.set(jdk.map { it.metadata.languageVersion.asInt() })
+    outputDirectory.set(layout.buildDirectory.dir('runtime'))
 }
 def platform = System.getProperty('os.name').toLowerCase().contains('win') ? 'windows' : System.getProperty('os.name').toLowerCase().contains('mac') ? 'mac' : 'linux'
 def arch = System.getProperty('os.arch') in ['aarch64', 'arm64'] ? 'aarch64' : 'x64'
@@ -45,7 +81,7 @@ tasks.register('runtimeDist', Zip) {
         from(layout.buildDirectory.dir('runtime')) { into 'runtime' }
         from('src/distribution')
     }
-    filesMatching(['**/bin/*', '**/lib/jspawnhelper']) {
-        filePermissions { unix('rwxr-xr-x') }
+    filesMatching(['**/bin/*', '**/lib/jspawnhelper']) { details ->
+        details.permissions { permissions -> permissions.unix('rwxr-xr-x') }
     }
 }

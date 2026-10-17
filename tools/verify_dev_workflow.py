@@ -46,6 +46,7 @@ def main():
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--work-dir", required=True, type=Path)
     parser.add_argument("--device", default=os.environ.get("ANDROID_SERIAL", "emulator-5554"))
+    parser.add_argument("--package", default="dev.vela.fixture")
     args = parser.parse_args()
     cli = args.cli.resolve()
     work = args.work_dir.resolve()
@@ -67,11 +68,13 @@ def main():
 
     if project.exists():
         raise RuntimeError(f"Use a fresh work directory: {project}")
-    run([cli, "init", project, "--package", "dev.vela.fixture"], work)
+    package = args.package
+    run([cli, "init", project, "--package", package], work)
     run([cli, "setup"])
     run([cli, "doctor"])
-    source = project / "src/main/java/dev/vela/fixture/MainScreen.java"
-    source.write_text(SCREEN)
+    source = project / "src/main/java" / package.replace(".", "/") / "MainScreen.java"
+    initial_screen = SCREEN.replace("dev.vela.fixture", package)
+    source.write_text(initial_screen)
     log_path = work / "dev.log"
     log = log_path.open("w")
     process = subprocess.Popen([str(cli), "dev", "--device", args.device], cwd=project, env=environment, stdout=log, stderr=subprocess.STDOUT)
@@ -107,16 +110,17 @@ def main():
 
     def edit(text, expected="Reloaded"):
         offset = len(log_path.read_text(errors="replace"))
+        started = time.monotonic()
         source.write_text(text)
         content = wait_log(expected, offset)
         content = wait_log("Edit processed in", offset)
-        return float(re.findall(r"Edit processed in ([\d.]+) s", content[offset:])[-1])
+        return round(time.monotonic() - started, 3)
 
     try:
         start = time.monotonic()
         wait_log("Vela ready", timeout=180)
         results["initial_dev_seconds"] = round(time.monotonic() - start, 3)
-        pid = android("shell", "pidof", "dev.vela.fixture").strip()
+        pid = android("shell", "pidof", package).strip()
         assert pid
         tap("Increment")
         tap("Child increment")
@@ -137,19 +141,41 @@ def main():
         apk_mtime = apk.stat().st_mtime_ns
         values = project / "src/main/vela/values.yaml"
         offset = len(log_path.read_text(errors="replace"))
+        started = time.monotonic()
         values.write_text(values.read_text().replace("Hello Vela", "YAML v2"))
         content = wait_log("Resources refreshed", offset)
         content = wait_log("Edit processed in", offset)
-        results["yaml_value_seconds"] = float(re.findall(r"Edit processed in ([\d.]+) s", content[offset:])[-1])
+        results["yaml_value_processing_seconds"] = float(re.findall(r"Edit processed in ([\d.]+) s", content[offset:])[-1])
+        results["yaml_value_save_to_ack_seconds"] = round(time.monotonic() - started, 3)
         assert all(file.stat().st_mtime_ns == stamp for file, stamp in modified.items()), "Value edit compiled Java"
         expect("YAML v2", "Count: 1", "Child: 1", "Ada")
-        screen = SCREEN.replace("Method v1", "Method v2")
-        results["method_edit_seconds"] = edit(screen)
+        screen = initial_screen.replace("Method v1", "Method v2")
+        results["method_edit_save_to_ack_seconds"] = edit(screen)
         expect("Method v2", "Count: 1", "Child: 1", "Ada")
         screen = screen.replace('private final Child child', 'private final MutableState<Integer> added = state("added", 7);\n    private final Child child')
         screen = screen.replace('text("Count: " + count.get()),', 'text("Count: " + count.get()),\n            text("Added: " + added.get()).withKey("added"),')
-        results["field_edit_seconds"] = edit(screen)
+        results["field_edit_save_to_ack_seconds"] = edit(screen)
         expect("Added: 7", "Count: 1", "Child: 1", "Ada")
+        # Changing the resource API must generate and load new accessors without an APK.
+        offset = len(log_path.read_text(errors="replace"))
+        values.write_text(values.read_text().replace("strings:\n", "strings:\n  extra: 'Schema added'\n", 1))
+        wait_log("Reloaded", offset)
+        wait_log("Edit processed in", offset)
+        screen = screen.replace('text("Added: " + added.get()).withKey("added"),', 'text("Added: " + added.get()).withKey("added"),\n            text(values.strings().extra()),')
+        edit(screen)
+        expect("Schema added", "Count: 1", "Child: 1", "Ada")
+        # New component definitions and their state scopes must load alongside existing children.
+        screen = screen.replace('private final Child child', 'private final Second second = new Second();\n    private final Child child')
+        screen = screen.replace('child("child", child)', 'child("child", child), child("second", second)')
+        screen = screen.rsplit("\n}", 1)[0] + '''
+    public static final class Second extends VelaComponent {
+        private final MutableState<Integer> count = state("count", 3);
+        public ViewNode render() { return text("Secondary: " + count.get()); }
+    }
+}
+'''
+        results["child_component_edit_save_to_ack_seconds"] = edit(screen)
+        expect("Secondary: 3", "Count: 1", "Child: 1", "Ada")
         edit(screen + "\ninvalid Java\n", "Compilation failed")
         expect("Added: 7", "Count: 1", "Child: 1")
         edit(screen)
@@ -161,7 +187,7 @@ def main():
             screen = screen.replace(f"Method v{version-1}", f"Method v{version}")
             edit(screen)
             expect(f"Method v{version}", "Count: 1", "Child: 1", "Ada")
-        assert android("shell", "pidof", "dev.vela.fixture").strip() == pid, "Supported edits restarted app"
+        assert android("shell", "pidof", package).strip() == pid, "Supported edits restarted app"
         assert apk.stat().st_mtime_ns == apk_mtime, "Supported edits assembled an APK"
         android("shell", "settings", "put", "system", "accelerometer_rotation", "0")
         android("shell", "settings", "put", "system", "user_rotation", "1")
@@ -173,19 +199,42 @@ def main():
         edit(screen, "Reset incompatible state: count")
         expect("Count: 0", "Child: 1", "Ada")
         tap("Increment")
+        # A failed full build must not leave a stale checkpoint that replays on rotation.
+        build_file = project / "build.gradle"
+        original_build = build_file.read_text()
+        offset = len(log_path.read_text(errors="replace"))
+        build_file.write_text(original_build + "\nthis is invalid !!!\n")
+        wait_log("Vela: Build failed", offset)
+        wait_log("Edit processed in", offset)
+        tap("Increment")
+        expect("Count: 2", "Child: 1", "Ada")
+        android("shell", "settings", "put", "system", "user_rotation", "1")
+        time.sleep(1)
+        android("shell", "settings", "put", "system", "user_rotation", "0")
+        time.sleep(1)
+        expect("Count: 2", "Child: 1", "Ada")
         config = project / "vela.yaml"
         offset = len(log_path.read_text(errors="replace"))
+        build_file.write_text(original_build)
         config.write_text(re.sub(r"^name:.*$", "name: 'Restarted Vela'", config.read_text(), flags=re.M))
         wait_log("Vela restart: Build configuration", offset)
         wait_log("Edit processed in", offset)
-        expect("Count: 1", "Child: 1", "Ada")
-        assert android("shell", "pidof", "dev.vela.fixture").strip() != pid, "Platform edit did not restart app"
+        expect("Count: 2", "Child: 1", "Ada")
+        assert android("shell", "pidof", package).strip() != pid, "Platform edit did not restart app"
         # A fresh forward is established per request; dropping the device transport must recover.
         android("reconnect")
         android("wait-for-device")
         screen = screen.replace("Method v5", "Method v6")
         edit(screen)
-        expect("Method v6", "Count: 1", "Child: 1", "Ada")
+        expect("Method v6", "Count: 2", "Child: 1", "Ada")
+        # Native resource consumers receive a full restart when YAML exports change.
+        screen = screen.replace('private final Child child', 'private final int nativeResource = android.R.id.content;\n    private final Child child')
+        edit(screen)
+        offset = len(log_path.read_text(errors="replace"))
+        values.write_text(values.read_text().replace("YAML v2", "Native resource restart"))
+        wait_log("Vela restart: YAML values", offset)
+        wait_log("Edit processed in", offset)
+        expect("Native resource restart", "Count: 2", "Child: 1", "Ada")
         run([cli, "build"])
         release = next((project / "build/outputs/apk/release").glob("*.apk"))
         with zipfile.ZipFile(release) as archive:
@@ -205,7 +254,7 @@ def main():
         except subprocess.TimeoutExpired:
             process.kill()
         log.close()
-        android("shell", "am", "force-stop", "dev.vela.fixture")
+        android("shell", "am", "force-stop", package)
 
 
 if __name__ == "__main__":

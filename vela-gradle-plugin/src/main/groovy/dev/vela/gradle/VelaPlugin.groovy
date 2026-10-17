@@ -50,8 +50,10 @@ class VelaPlugin implements Plugin<Project> {
                 compileClasspath.from(javac.map { it.classpath })
                 desugaring.from(project.configurations.getByName('coreLibraryDesugaring'))
                 androidJar.set(new File(android.sdkDirectory, "platforms/android-${config.compileSdk()}/android.jar"))
-                def suffix = System.getProperty('os.name').toLowerCase().contains('windows') ? '.bat' : ''
-                d8.set(new File(android.sdkDirectory, "build-tools/${android.buildToolsVersion}/d8${suffix}"))
+                d8.set(new File(android.sdkDirectory, "build-tools/${android.buildToolsVersion}/lib/d8.jar"))
+                def javaName = System.getProperty('os.name').toLowerCase().contains('windows') ? 'java.exe' : 'java'
+                javaExecutable.set(new File(System.getProperty('java.home'), "bin/${javaName}"))
+                javaVersion.set(System.getProperty('java.version'))
                 minimumApi.set(config.minSdk())
                 outputDirectory.set(project.layout.buildDirectory.dir('vela/reload'))
             }

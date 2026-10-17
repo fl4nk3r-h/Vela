@@ -7,6 +7,7 @@ public final class VelaRuntime<H> implements AutoCloseable {
     private final VelaComponent component;
     private final MountedTree<H> tree;
     private final FrameScheduler scheduler;
+    private ResourceResolver resources = ResourceResolver.empty();
     private final Thread owner = Thread.currentThread();
     private volatile boolean mounted;
     private boolean attached;
@@ -25,7 +26,7 @@ public final class VelaRuntime<H> implements AutoCloseable {
     public VelaRuntime(VelaComponent component, RendererBackend<H> backend, FrameScheduler scheduler,
                        ResourceResolver resources) {
         this(component, backend, scheduler);
-        component.resourceResolver(resources);
+        this.resources = Objects.requireNonNull(resources, "resources");
     }
 
     public void updateResources(ResourceResolver resources) {
@@ -40,6 +41,7 @@ public final class VelaRuntime<H> implements AutoCloseable {
             throw new IllegalStateException("Runtime can only be mounted once");
         }
         component.attachRuntime(this::invalidate, owner);
+        component.resourceResolver(resources);
         attached = true;
         mounted = true;
         rendering = true;

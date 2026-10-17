@@ -17,6 +17,8 @@ abstract class ReloadDex extends DefaultTask {
     @Classpath abstract ConfigurableFileCollection getDesugaring()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getAndroidJar()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getD8()
+    @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getJavaExecutable()
+    @Input abstract Property<String> getJavaVersion()
     @Input abstract Property<Integer> getMinimumApi()
     @OutputDirectory abstract DirectoryProperty getOutputDirectory()
     @Inject abstract ExecOperations getExecOperations()
@@ -59,8 +61,7 @@ abstract class ReloadDex extends DefaultTask {
         args.addAll(['--desugared-lib', desugarConfig.toString()])
         compileClasspath.files.findAll { it.exists() }.sort().each { args.addAll(['--classpath', it.absolutePath]) }
         args.add(jar.toString())
-        def executable = d8.get().asFile.absolutePath
-        def command = System.getProperty('os.name').toLowerCase().contains('windows') ? ['cmd', '/c', executable] : [executable]
+        def command = [javaExecutable.get().asFile.absolutePath, '-Xmx512m', '-classpath', d8.get().asFile.absolutePath, 'com.android.tools.r8.D8']
         execOperations.exec { commandLine(command + args) }.assertNormalExitValue()
         if (Files.exists(output.resolve('classes2.dex'))) {
             Files.writeString(output.resolve('restart-required'), 'multiple-dex')

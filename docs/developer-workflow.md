@@ -172,7 +172,7 @@ The replacement screen restores compatible keyed state and renders in a separate
 | Java methods, fields, or components in the configured application package | Compile and replace the screen without APK assembly or installation |
 | YAML value with unchanged resource API | Transfer catalog and render again without Java compilation |
 | YAML resource keys/types/arguments | Regenerate accessors and perform code reload |
-| Manifest/configuration, dependencies, assets, native resources/libraries, or code outside the reloadable package | Build and reinstall, attempting a state checkpoint first |
+| Manifest/configuration, dependencies, assets, native resources/libraries, YAML used by native resource-ID consumers, or code outside the reloadable package | Build and reinstall, attempting a state checkpoint first |
 | Payload requiring multiple DEX files or exceeding the transfer limit | Full restart fallback |
 
 Use matching source directories under `src/main/java/<application-package>/` for reloadable code. APK resource-ID references remain tied to the installed APK; edits to native platform resources need a restart. Application statics and arbitrary object graphs are not transferred. New, removed, or incompatible state keys use defaults; custom encodings should declare a version identifier. Native focus, selection, scroll state, and keyed child scopes are restored where matching controls remain.
@@ -192,6 +192,6 @@ JDK 25 is the default development toolchain. Shared core and Android classes tar
 python3 tools/verify_dev_workflow.py --cli vela-cli/build/install/vela/bin/vela --work-dir /tmp/vela-workflow --device emulator-5554
 ```
 
-The workflow verifier creates a disposable application, edits YAML and Java, exercises state and child scopes, tests failed compilation/rendering and restart recovery, checks unchanged application PID/APK timestamps, and inspects release DEX files. It records measured edit timings in its work directory. Timings depend on hardware, project size, emulator, and warm caches; Vela does not promise a universal reload latency.
+The workflow verifier creates a disposable application, edits YAML and Java, exercises state and child scopes, tests failed compilation/rendering and restart recovery, checks unchanged application PID/APK timestamps, and inspects release DEX files. It records save-to-acknowledgment timings, including the watcher's approximately 180 ms debounce, in its work directory. The CLI's separate processing-time message excludes that debounce. `tools/benchmark_builds.py` measures clean, unchanged, and full rebuild/restart baselines for a disposable generated project. Timings depend on hardware, project size, emulator, and warm caches; Vela does not promise a universal reload latency.
 
 Related: [README](../README.md), [runtime guide](runtime-guide.md), [Android backend](android-backend.md), [framework gaps](framework-gaps.md).

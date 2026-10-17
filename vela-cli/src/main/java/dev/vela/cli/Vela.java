@@ -27,7 +27,8 @@ public final class Vela {
                     --once watches and processes one edit before exiting.
                     """); return 0;
         }
-        Path cache = Path.of(System.getenv().getOrDefault("VELA_CACHE", Path.of(System.getProperty("user.home"), ".vela").toString()));
+        String configuredCache = System.getenv("VELA_CACHE");
+        Path cache = configuredCache == null || configuredCache.isBlank() ? Path.of(System.getProperty("user.home"), ".vela") : Path.of(configuredCache);
         ToolchainInstaller installer = new ToolchainInstaller(cache);
         List<String> options = List.of(args);
         if (args[0].equals("init")) {
@@ -56,8 +57,11 @@ public final class Vela {
         }
     }
     static int gradle(Path project, ToolchainInstaller.Tools tools, String... tasks) throws Exception {
-        Path wrapper = project.resolve(ToolchainInstaller.windows() ? "gradlew.bat" : "gradlew");
-        List<String> command = new ArrayList<>(Programs.command(wrapper)); command.addAll(List.of(tasks)); command.add("--console=plain");
+        Path wrapper = project.resolve("gradle/wrapper/gradle-wrapper.jar");
+        if (!Files.isRegularFile(wrapper)) throw new IOException("Gradle wrapper is missing. Restore gradle/wrapper/gradle-wrapper.jar.");
+        Path java = tools.javaHome().resolve("bin/java" + (ToolchainInstaller.windows() ? ".exe" : ""));
+        List<String> command = new ArrayList<>(Programs.command(java, "-Xms64m", "-Xmx64m", "-classpath", wrapper.toString(), "org.gradle.wrapper.GradleWrapperMain"));
+        command.addAll(List.of(tasks)); command.add("--console=plain");
         return Programs.run(command, project, tools.environment());
     }
     private static int doctor(Path project, ToolchainInstaller.Tools tools, ProjectConfig config) throws Exception {
@@ -68,7 +72,12 @@ public final class Vela {
         checks.put("Android build tools 35.0.0", Files.isDirectory(tools.sdk().resolve("build-tools/35.0.0")));
         checks.put("ADB", Files.isRegularFile(tools.adb()));
         checks.put("Gradle wrapper", Files.isRegularFile(project.resolve("gradle/wrapper/gradle-wrapper.jar")));
-        checks.put("Vela framework artifacts", Files.isDirectory(project.resolve(".vela/repository/dev/vela")));
+        boolean artifacts = true;
+        for (String artifact : List.of("vela-core", "vela-tooling", "vela-gradle-plugin", "vela-dev-protocol", "vela-android", "vela-devtools-android")) {
+            String extension = artifact.equals("vela-android") || artifact.equals("vela-devtools-android") ? ".aar" : ".jar";
+            artifacts &= Files.isRegularFile(project.resolve(".vela/repository/dev/vela/" + artifact + "/0.1.0/" + artifact + "-0.1.0" + extension));
+        }
+        checks.put("Vela framework artifacts", artifacts);
         for (var check : checks.entrySet()) { System.out.println((check.getValue() ? "OK      " : "MISSING ") + check.getKey()); if (!check.getValue()) missing++; }
         if (Files.isRegularFile(tools.adb())) {
             try { System.out.println(Programs.capture(Programs.command(tools.adb(), "devices"), project, tools.environment())); }

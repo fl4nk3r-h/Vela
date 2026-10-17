@@ -5,6 +5,7 @@ import java.io.*;
 import java.net.URI;
 import java.nio.file.*;
 import java.util.*;
+import java.nio.channels.FileChannel;
 
 public final class ToolchainInstaller {
     private final Path cache;
@@ -49,7 +50,7 @@ public final class ToolchainInstaller {
                 Path unpacked = install("sdk", cache.resolve("android-command-tools/" + manifest.getProperty("sdk.tools.version", "22.0")));
                 ProjectInitializer.copyTree(unpacked.resolve("cmdline-tools"), sdk.resolve("cmdline-tools/latest"));
             }
-            List<String> licenses = Programs.command(manager, "--sdk_root=" + sdk, "--licenses");
+            List<String> licenses = sdkCommand(javaHome, manager, "sdkmanager", "--sdk_root=" + sdk, "--licenses");
             ProcessBuilder builder = new ProcessBuilder(licenses).directory(project.toFile()); builder.environment().putAll(tools.environment());
             builder.redirectOutput(ProcessBuilder.Redirect.INHERIT).redirectError(ProcessBuilder.Redirect.INHERIT);
             if (!acceptLicenses) {
@@ -59,7 +60,7 @@ public final class ToolchainInstaller {
             Process process = builder.start();
             if (acceptLicenses) try (OutputStream out = process.getOutputStream()) { out.write("y\n".repeat(100).getBytes(java.nio.charset.StandardCharsets.US_ASCII)); }
             if (process.waitFor() != 0) throw new IOException("Android SDK licenses were not accepted");
-            List<String> packages = new ArrayList<>(Programs.command(manager, "--sdk_root=" + sdk, "platform-tools", "platforms;android-" + config.compileSdk(), "build-tools;35.0.0"));
+            List<String> packages = new ArrayList<>(sdkCommand(javaHome, manager, "sdkmanager", "--sdk_root=" + sdk, "platform-tools", "platforms;android-" + config.compileSdk(), "build-tools;35.0.0"));
             String image = "system-images;android-35;google_apis;" + (architecture().equals("aarch64") ? "arm64-v8a" : "x86_64");
             if (emulator) packages.addAll(List.of("emulator", image));
             if (Programs.run(packages, project, tools.environment()) != 0) throw new IOException("Android SDK package installation failed");
@@ -68,9 +69,10 @@ public final class ToolchainInstaller {
                 throw new IOException("Required SDK packages are missing; review the package licenses and rerun vela setup");
             if (emulator) {
                 Path avdManager = manager.resolveSibling("avdmanager" + (windows() ? ".bat" : ""));
-                String installed = Programs.capture(Programs.command(avdManager, "list", "avd"), project, tools.environment());
+                String installed = Programs.capture(sdkCommand(javaHome, avdManager, "avdmanager", "list", "avd"), project, tools.environment());
                 if (!installed.contains("Name: vela-api-35")) {
-                    ProcessBuilder avd = new ProcessBuilder(Programs.command(avdManager, "create", "avd", "--name", "vela-api-35", "--package", image));
+                    Path avdPath = cache.resolve("avds/vela-api-35.avd").toAbsolutePath(); Files.createDirectories(avdPath.getParent());
+                    ProcessBuilder avd = new ProcessBuilder(sdkCommand(javaHome, avdManager, "avdmanager", "create", "avd", "--name", "vela-api-35", "--package", image, "--path", avdPath.toString()));
                     avd.environment().putAll(tools.environment()); avd.redirectOutput(ProcessBuilder.Redirect.INHERIT).redirectError(ProcessBuilder.Redirect.INHERIT);
                     Process create = avd.start(); try (OutputStream out = create.getOutputStream()) { out.write("no\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII)); }
                     if (create.waitFor() != 0) throw new IOException("Emulator creation failed; verify the system image and available disk space");
@@ -94,6 +96,13 @@ public final class ToolchainInstaller {
         return new Tools(javaHome, sdk);
     }
     public Path install(String kind, Path target) throws Exception {
+        Files.createDirectories(target.toAbsolutePath().getParent());
+        try (FileChannel channel = FileChannel.open(target.resolveSibling(target.getFileName() + ".lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+             var lock = channel.lock()) {
+            return installLocked(kind, target);
+        }
+    }
+    private Path installLocked(String kind, Path target) throws Exception {
         if (Files.isRegularFile(target.resolve(".complete"))) return target;
         String prefix = kind + "." + operatingSystem() + "." + architecture();
         String url = manifest.getProperty(prefix + ".url");
@@ -108,6 +117,17 @@ public final class ToolchainInstaller {
             if (Files.exists(target)) ProjectInitializer.deleteTree(target);
             Files.move(staging, target); return target;
         } finally { if (Files.exists(staging)) ProjectInitializer.deleteTree(staging); }
+    }
+    private static List<String> sdkCommand(Path javaHome, Path manager, String tool, String... arguments) {
+        Path home = manager.getParent().getParent();
+        Path java = javaHome.resolve("bin/java" + (windows() ? ".exe" : ""));
+        String entry = tool.equals("sdkmanager") ? "com.android.sdklib.tool.sdkmanager.SdkManagerCli" : "com.android.sdklib.tool.AvdManagerCli";
+        String toolsProperty = tool.equals("sdkmanager") ? "com.android.sdklib.toolsdir" : "com.android.sdkmanager.toolsdir";
+        return Programs.command(java, combine(new String[]{"-Xmx512m", "-D" + toolsProperty + "=" + home, "-classpath", home.resolve("lib/" + tool + "-classpath.jar").toString(), entry}, arguments));
+    }
+    private static String[] combine(String[] prefix, String[] arguments) {
+        String[] result = Arrays.copyOf(prefix, prefix.length + arguments.length);
+        System.arraycopy(arguments, 0, result, prefix.length, arguments.length); return result;
     }
     private Path existingJava() {
         List<Path> candidates = new ArrayList<>();
@@ -126,7 +146,7 @@ public final class ToolchainInstaller {
     }
     private Path existingSdk() {
         for (String name : List.of("ANDROID_HOME", "ANDROID_SDK_ROOT")) {
-            String path = environment.get(name); if (path != null && Files.isDirectory(Path.of(path))) return Path.of(path).toAbsolutePath();
+            String path = environment.get(name); if (path != null && !path.isBlank() && Files.isDirectory(Path.of(path))) return Path.of(path).toAbsolutePath();
         }
         return Files.isDirectory(cache.resolve("android-sdk")) ? cache.resolve("android-sdk") : null;
     }
