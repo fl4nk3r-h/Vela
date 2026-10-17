@@ -14,6 +14,7 @@ import java.util.zip.*
 abstract class ReloadDex extends DefaultTask {
     @InputFiles @PathSensitive(PathSensitivity.RELATIVE) abstract ConfigurableFileCollection getClasses()
     @Classpath abstract ConfigurableFileCollection getCompileClasspath()
+    @Classpath abstract ConfigurableFileCollection getDesugaring()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getAndroidJar()
     @InputFile @PathSensitive(PathSensitivity.NONE) abstract RegularFileProperty getD8()
     @Input abstract Property<Integer> getMinimumApi()
@@ -44,6 +45,18 @@ abstract class ReloadDex extends DefaultTask {
                     .forEach { Files.delete(it) }
         }
         def args = ['--debug', '--min-api', minimumApi.get().toString(), '--lib', androidJar.get().asFile.absolutePath, '--output', output.toString()]
+        def desugarConfig = null
+        desugaring.files.sort().each { artifact ->
+            new ZipFile(artifact).withCloseable { zip ->
+                def entry = zip.getEntry('META-INF/desugar/d8/desugar.json')
+                if (entry != null) {
+                    desugarConfig = output.resolve('desugar.json')
+                    zip.getInputStream(entry).withCloseable { input -> Files.copy(input, desugarConfig, java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
+                }
+            }
+        }
+        if (desugarConfig == null) throw new IllegalStateException('Core library desugaring configuration is missing')
+        args.addAll(['--desugared-lib', desugarConfig.toString()])
         compileClasspath.files.findAll { it.exists() }.sort().each { args.addAll(['--classpath', it.absolutePath]) }
         args.add(jar.toString())
         def executable = d8.get().asFile.absolutePath

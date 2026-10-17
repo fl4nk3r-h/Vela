@@ -19,11 +19,12 @@ public final class MainScreen extends VelaComponent {
     private final MutableState<Integer> count = state("count", 0);
     private final MutableState<String> name = state("name", "");
     private final Child child = new Child();
+    private record Label(String text) { }
     @Override public ViewNode render() {
         var values = Values.of(resources());
         return column(
             text(values.strings().title()),
-            text("Method v1").withKey("method"),
+            text(new Label(java.util.List.of("Method v1").stream().toList().get(0)).text()).withKey("method"),
             text("Count: " + count.get()),
             button("Increment", () -> count.update(n -> n + 1)),
             field("Name", name).withKey("name"),
@@ -152,7 +153,7 @@ def main():
         edit(screen + "\ninvalid Java\n", "Compilation failed")
         expect("Added: 7", "Count: 1", "Child: 1")
         edit(screen)
-        broken = screen.replace('text("Method v2")', 'text(broken())').replace('public static final class Child', 'private String broken() { throw new IllegalStateException("Rejected candidate"); }\n    public static final class Child')
+        broken = screen.replace('new Label(java.util.List.of("Method v2").stream().toList().get(0)).text()', 'broken()').replace('public static final class Child', 'private String broken() { throw new IllegalStateException("Rejected candidate"); }\n    public static final class Child')
         edit(broken, "Rejected candidate")
         expect("Method v2", "Count: 1", "Child: 1", "Ada")
         edit(screen)

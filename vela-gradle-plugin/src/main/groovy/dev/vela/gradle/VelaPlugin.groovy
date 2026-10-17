@@ -48,6 +48,7 @@ class VelaPlugin implements Plugin<Project> {
                 dependsOn(javac)
                 classes.from(javac.flatMap { it.destinationDirectory })
                 compileClasspath.from(javac.map { it.classpath })
+                desugaring.from(project.configurations.getByName('coreLibraryDesugaring'))
                 androidJar.set(new File(android.sdkDirectory, "platforms/android-${config.compileSdk()}/android.jar"))
                 def suffix = System.getProperty('os.name').toLowerCase().contains('windows') ? '.bat' : ''
                 d8.set(new File(android.sdkDirectory, "build-tools/${android.buildToolsVersion}/d8${suffix}"))
